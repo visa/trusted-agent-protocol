@@ -7,15 +7,13 @@
 
 AI agents are becoming part of everyday commerce, capable of executing complex tasks like booking travel or managing subscriptions. As agent capabilities evolve, merchants need visibility into their identities and actions more than ever.
 
-**For an agent to make a purchase, merchants must answer:**
+For an agent to make a purchase, the **merchant** must be able to answer critical questions:
 
 -  Is this a legitimate, trusted, and recognized AI agent?
 -  Is it acting on behalf of a specific, authenticated user?
 -  Does the agent carry valid instructions from the user to make this purchase?
 
-**Without a standard, merchants face an impossible choice:**
--  Block potentially valuable agent-driven commerce
--  Accept significant operational and security risks from unverified agents
+Without a standard for recognition and communication, merchants are left with a difficult choice: block potentially valuable, agent-driven traffic, or blindly accept the significant operational and security risks that could come alongside agentic interactions of today.
 
 ## The Solution
 
