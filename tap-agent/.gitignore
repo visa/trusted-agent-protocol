@@ -1,0 +1,20 @@
+# Environment files
+.env
+.env.local
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit
+.streamlit/
+
+# Build outputs
+build/
+dist/
