@@ -1,0 +1,17 @@
+# IDE specific files:
+.idea
+*.iml
+
+# Specific build directories:
+**/target
+**/node_modules
+.DS_Store
+**pycache**
+**build**
+**.zip**
+**.venv*
+*DealAgent**
+**TPA.code-workspace**
+**package-lock.json**
+venv**
+scan**

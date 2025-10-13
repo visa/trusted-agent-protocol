@@ -7,13 +7,15 @@
 
 AI agents are becoming part of everyday commerce, capable of executing complex tasks like booking travel or managing subscriptions. As agent capabilities evolve, merchants need visibility into their identities and actions more than ever.
 
-For an agent to make a purchase, the **merchant** must be able to answer critical questions:
+**For an agent to make a purchase, merchants must answer:**
 
 -  Is this a legitimate, trusted, and recognized AI agent?
 -  Is it acting on behalf of a specific, authenticated user?
 -  Does the agent carry valid instructions from the user to make this purchase?
 
-Without a standard for recognition and communication, merchants are left with a difficult choice: block potentially valuable, agent-driven traffic, or blindly accept the significant operational and security risks that could come alongside agentic interactions of today.
+**Without a standard, merchants face an impossible choice:**
+-  Block potentially valuable agent-driven commerce
+-  Accept significant operational and security risks from unverified agents
 
 ## The Solution
 
@@ -41,3 +43,56 @@ For merchants, the Trusted Agent Protocol describes a standardized set of mechan
 
 ## Example Agent Verification for Payments
 ![](./assets/trusted-agent-protocol-flow.png)
+
+## Quick Start
+
+This repository contains a complete sample implementation demonstrating the Trusted Agent Protocol across multiple components:
+
+### 🚀 **Running the Sample**
+
+1. **Install Dependencies** (from root directory):
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Start All Services**:
+   ```bash
+   # Terminal 1: Agent Registry (port 8001)
+   cd agent-registry && python main.py
+   
+   # Terminal 2: Merchant Backend (port 8000)
+   cd merchant-backend && python -m uvicorn app.main:app --reload
+   
+   # Terminal 3: CDN Proxy (port 3002)
+   cd cdn-proxy && npm install && npm start
+   
+   # Terminal 4: Merchant Frontend (port 3001)
+   cd merchant-frontend && npm install && npm run dev
+   
+   # Terminal 5: TAP Agent (port 8501)
+   cd tap-agent && streamlit run agent_app.py
+   ```
+
+3. **Try the Demo**:
+   - Open the TAP Agent at http://localhost:8501
+   - Configure merchant URL: http://localhost:3001
+   - Generate signatures and interact with the sample merchant
+
+### 📚 **Component Documentation**
+
+Each component has detailed setup instructions:
+
+- **[TAP Agent](./tap-agent/README.md)** - Streamlit app demonstrating agent signature generation
+- **[Merchant Frontend](./merchant-frontend/README.md)** - React e-commerce sample with TAP integration  
+- **[Merchant Backend](./merchant-backend/README.md)** - FastAPI backend with signature verification
+- **[CDN Proxy](./cdn-proxy/README.md)** - Node.js proxy implementing RFC 9421 signature verification
+- **[Agent Registry](./agent-registry/README.md)** - Public key registry service for agent verification
+
+### 🏗️ **Architecture Overview**
+
+The sample demonstrates a complete TAP ecosystem:
+1. **TAP Agent** generates RFC 9421 compliant signatures
+2. **Merchant Frontend** provides the e-commerce interface
+3. **CDN Proxy** intercepts and verifies agent signatures  
+4. **Merchant Backend** processes verified requests
+5. **Agent Registry** manages agent public keys and metadata
