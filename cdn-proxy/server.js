@@ -152,6 +152,20 @@ const AGENT_REGISTRY_URL = 'http://localhost:9002';
 const keyCache = new Map();
 const CACHE_TTL = 5 ; // 5 milliseconds
 
+// Nonce cache to prevent replay attacks
+const nonceCache = new Map();
+const NONCE_TTL = 3600000; // 1 hour - nonces older than this are purged
+
+// Cleanup old nonces periodically to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [nonce, timestamp] of nonceCache.entries()) {
+    if (now - timestamp > NONCE_TTL) {
+      nonceCache.delete(nonce);
+    }
+  }
+}, 60000); // Clean up every minute
+
 // Function to fetch key directly by keyId from Agent Registry
 async function getKeyById(keyId) {
   const cacheKey = `key:${keyId}`;
@@ -467,6 +481,30 @@ const signatureKeyId = signatureData.keyId;
         'The signature has expired and is no longer valid.', 
         `Expired at: ${new Date(signatureData.expires * 1000).toISOString()}`);
     }
+    
+    // Validate nonce to prevent replay attacks
+    const nonce = signatureData.nonce;
+    if (!nonce) {
+      console.log('❌ CDN: Missing nonce in signature');
+      return sendErrorResponse(res, 403, '🔐 Missing Nonce', 
+        'Signature must include a nonce to prevent replay attacks.', null);
+    }
+    
+    // Check if nonce has been used before
+    if (nonceCache.has(nonce)) {
+      const previousUse = nonceCache.get(nonce);
+      console.log('❌ CDN: Replay attack detected - nonce already used');
+      console.log('  - Nonce:', sanitizeLogOutput(nonce));
+      console.log('  - First seen:', new Date(previousUse).toISOString());
+      console.log('  - Current time:', new Date().toISOString());
+      return sendErrorResponse(res, 403, '🚫 Replay Attack Detected', 
+        'This signature has already been used. Each request must have a unique nonce.',
+        `Nonce was previously used at ${new Date(previousUse).toISOString()}`);
+    }
+    
+    // Store nonce with current timestamp
+    nonceCache.set(nonce, Date.now());
+    console.log('✅ Nonce validated and cached:', sanitizeLogOutput(nonce));
     
     // Build request data for signature verification
     const requestData = {
