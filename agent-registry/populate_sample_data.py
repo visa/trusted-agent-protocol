@@ -13,6 +13,8 @@ Sample script to populate the agent registry with initial data
 
 import requests
 import json
+import base64
+from cryptography.hazmat.primitives import serialization
 
 # Agent Registry Service URL
 BASE_URL = "http://localhost:9002"
@@ -29,13 +31,13 @@ sample_agents = [
             {
                 "key_id": "primary",
                 "public_key": """-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoG2JyN6sWH0BSze3C8iK
-6u6q7+0wo5ybcFX1kKquBDCLIKqY1hqvtVmj9wTGpCXQ2Jt8PtXXnSOhj69ng3mc
-ypJjf72GyKrgHX+nYxcQrnrPXNDaDrhLVtxDsoGIwyVTiUGH5bX2qlIerwlfG9Jz
-24HabfGSs6wpxXlfSt29giljSbX78g+Rb9TEV3joZjSQIn68iaKU147uVpv2JhCA
-88X9l7fKMUSKDbiyhLRpDjutHrns8NYALPSyRLN645+Hcl7so+AWb9CR8+bdgBUq
-GHYlyRsMdsQENFDDFS35M4oz/5MeXj+sIAWrq2ceI0LBttCH6cOcX/r1VpSqoUc1
-dQIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx4rNYC4ChLr3xvR9K5a9
+JGFksUYbVqB2XfVF6QHlU9W0vONUjunKo1V56WkJWxY/diolG0847NTj2y0ksnZv
+18e/AuPex4blylGuRXSBOoxsTkN6szMeFB1vsrKqrDqCGxOP0cHeW6biCZbOhQpE
+tjWVwEXsJMzbKIYwhx35UrD1RjfRCdsFP6ery/tBu0jnTN47pWQWBq200JXZRpSR
+0MfPDeIdQzvTUrHnxIbfGdsBixHvZXnw8Fa3lG9ol5l9QYpi8MN3qoVM4rT4ANcW
+FkVaOOsJYd863Bqy3X9vaIUpDqJS0HoOq8l8X26HGtX2LinFi7hcPGZWiznj03v2
+ywIDAQAB
 -----END PUBLIC KEY-----""",
                 "algorithm": "RSA-SHA256",
                 "description": "Primary signing key for Test Agent 1",
@@ -91,6 +93,35 @@ swIDAQAB
     }
 ]
 
+def make_agent_from_PEM_files():
+    with open("ed25519_public.pem", "rb") as f:
+        ed25519_public_key= serialization.load_pem_public_key(f.read())
+        ed25519_public_key_b64 = base64.b64encode(ed25519_public_key.public_bytes_raw()).decode("utf-8")
+    rsa_public_key = open("rsa_public.pem", "r").read()
+    return {
+        "name": "My TAP Agent",
+        "domain": "https://tapagent.com",
+        "description": "Official Tap Agent 1 service for merchant verification",
+        "contact_email": "support@tapagent.com",
+        "is_active": "true",
+        "keys": [
+            {
+                "key_id": "primary",
+                "public_key": rsa_public_key,
+                "algorithm": "RSA-SHA256",
+                "description": "Primary signing key for Test Agent 1",
+                "is_active": "true"
+            },
+            {
+                "key_id": "primary-ed25519",
+                "public_key": ed25519_public_key_b64,
+                "algorithm": "ed25519",
+                "description": "Primary Ed25519 signing key for modern crypto",
+                "is_active": "true"
+            }
+        ]
+    }
+
 def register_agent(agent_data):
     """Register a single agent"""
     try:
@@ -130,6 +161,9 @@ def main():
     # Register each agent
     for agent in sample_agents:
         register_agent(agent)
+    # Register the agent from the PEM files
+    register_agent(make_agent_from_PEM_files())
+
     
     print("🏁 Sample data population completed!")
     

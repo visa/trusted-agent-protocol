@@ -16,15 +16,11 @@ from cryptography.exceptions import InvalidSignature
 import base64
 import hashlib
 
-publicKey = """-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAysHJFJ9uoVvU1sH2x3TV
-bwW3nfyp34eOb8w177Ei/Bx8pk+8Ibu1yulV0nCBl/c9insg1k2x7dw1jRDZHJBG
-wIpCdRL0GKm6qIdtsjeOcMnkI5ET0zGpxkhuRUwRblYW3LAdAq1Gja1WSPQKRT8r
-EhUsmSlDWgAf0rFna15Ok6zOO3q21LtrEjnJSrgO+cr33YH0IAdALD7hqtPYK7+/
-7dD/XIgGW9cX0USMxdDBUt8TnN2TYar5YXetpMnFOPpQHiGpKTkDwrRggcthUyuC
-e1CoL/9a/DWilJwd481QkurvZqGaKegX5DlI+jLNvfi8TWMS3jCjknyOLg54KU86
-LQIDAQAB
------END PUBLIC KEY-----"""
+with open("rsa_public.pem", "r") as f:
+    publicKey_rsa = f.read()
+
+with open("ed25519_public.pem", "r") as f:
+    publicKey_ed25519 = f.read()
 
 class SignatureVerifier:
     def __init__(self):
@@ -44,10 +40,10 @@ class SignatureVerifier:
         """Load public key for the agent. In production, load from secure storage."""
         
         if agent_name == "example":
-            return serialization.load_pem_public_key(publicKey.encode("utf-8"))
+            return serialization.load_pem_public_key(publicKey_rsa.encode("utf-8"))
         elif agent_name == "sample":
             # Replace with actual sample public key in production
-            return serialization.load_pem_public_key(publicKey.encode("utf-8"))
+            return serialization.load_pem_public_key(publicKey_rsa.encode("utf-8"))
         else:
             raise ValueError(f"Unknown agent name: {agent_name}")
 

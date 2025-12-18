@@ -4,17 +4,7 @@ A sophisticated Streamlit web application for testing RFC 9421 HTTP Message Sign
 
 ## Environment Configuration
 
-Create a `.env` file in the root directory with the following variables:
-
-```bash
-# RSA Keys (for RSA-PSS-SHA256 signatures)
-RSA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-RSA_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-
-# Ed25519 Keys (for Ed25519 signatures)
-ED25519_PRIVATE_KEY="base64_encoded_private_key"
-ED25519_PUBLIC_KEY="base64_encoded_public_key"
-```
+The `generate_keys.sh` script will generate a set of keys for the agent.
 
 ## Features
 
@@ -155,8 +145,8 @@ streamlit run agent_app.py --server.runOnSave true
 ### Environment Setup
 ```bash
 # Generate RSA keys (optional - for RSA-PSS-SHA256)
-openssl genrsa -out private_key.pem 2048
-openssl rsa -in private_key.pem -pubout -out public_key.pem
+openssl genrsa -out rsa_private_key.pem 2048
+openssl rsa -in rsa_private_key.pem -pubout -out rsa_public_key.pem
 
 # Generate Ed25519 keys (optional - for Ed25519)
 openssl genpkey -algorithm Ed25519 -out ed25519_private.pem

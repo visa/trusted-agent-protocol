@@ -1,3 +1,6 @@
+# project keys
+*.pem
+
 # IDE specific files:
 .idea
 *.iml
