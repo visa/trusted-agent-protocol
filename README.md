@@ -1,98 +1,56 @@
-# Trusted Agent Protocol
+# Trusted Agent Protocol (TAP) Reference Implementation
 
-*Establishing a universal standard of trust between AI agents and merchants for the next phase of agentic commerce.*
+A secure, edge-enforced system for authenticating Autonomous AI Agents using the **Trusted Agent Protocol**.
 
+## Overview
 
-## The Challenge
+This project implements a reference architecture where a **CDN Proxy** sits between AI Agents and Merchant Applications, enforcing identity and security at the edge.
 
-AI agents are becoming part of everyday commerce, capable of executing complex tasks like booking travel or managing subscriptions. As agent capabilities evolve, merchants need visibility into their identities and actions more than ever.
+It supports multiple standard authentication mechanisms to ensure compatibility, compliance, and scalability:
+1.  **Mutual TLS / Client Certificates** (RFC 9440) for scalable, connection-level identity verification by the CA.
+2.  **HTTP Message Signatures** (RFC 9421) for fine-grained, request-level proof-of-possession and compatibility with application-layer signing.
 
-**For an agent to make a purchase, merchants must answer:**
+For detailed architecture and protocol diagrams, see [src/design.md](src/design.md).
 
--  Is this a legitimate, trusted, and recognized AI agent?
--  Is it acting on behalf of a specific, authenticated user?
--  Does the agent carry valid instructions from the user to make this purchase?
+## Components
 
-**Without a standard, merchants face an impossible choice:**
--  Block potentially valuable agent-driven commerce
--  Accept significant operational and security risks from unverified agents
+*   **Agent**: The client representing the AI user. Manages keys, requests certificates, and signs requests.
+*   **CDN Proxy**: The edge gatekeeper. Verifies mTLS certificates and HTTP Signatures before forwarding traffic.
+*   **Registry**: The Identity Provider. Stores Agent DID documents and public keys.
+*   **Authority**: A private Certificate Authority (CA) that issues short-lived authentication certificates to registered Agents.
 
-## The Solution
+## Getting Started
 
-Visa's **Trusted Agent Protocol** provides a standardized, cryptographic method for an AI agent to prove its identity and associated authorization directly to merchants. By presenting a secure digital signature with every interaction, a merchant can verify that an agent is legitimate and has the user's permission to act.
+### Prerequisites
+*   [Bun](https://bun.sh) (v1.0+)
 
-For merchants, the Trusted Agent Protocol describes a standardized set of mechanisms enabling merchants to:
+### Installation
+```bash
+bun install
+```
 
-- **Cryptographically Verify Agent Intent:** Instantly distinguish a legitimate, credentialed agent from an anonymous bot. The agent presents a secure signature that includes timestamps, a unique session identifier, key identifier, and algorithm identifier, allowing you to verify that the signature is current and prevent relays or replays. 
+### Running Tests
+Run the full test suite:
+```bash
+bun test
+```
 
-- **Confirm Transaction-Specific Authorization:** Ensure the agent is authorized for the specific action it is taking  (browsing or payment) as the signature is bound to your domain and the specific operation being performed.
+> [!WARNING]
+> **Known Issue with Bun Test Runner**
+> You may encounter failing tests when running the full suite (`bun test`) due to how Bun handles client certificates or parallel execution context.
+>
+> If this happens, run the proxy tests in isolation to verify correctness:
+> ```bash
+> bun test src/proxy/_test.ts
+> ```
 
-- **Receive Trusted User & Payment Identifiers:** Securely receive key information needed for checkout via query parameters. This can include, as consented by the consumer, verifiable consumer identifiers, Payment Account References (PARs) for cards on file, or other identifiers like loyalty numbers, emails and phone numbers, allowing you to streamline or pre-fill the customer experience.
+## Project Status
 
-- **Reduce Fraud:** By trusting the agent's identity and intentions, merchants can create a more seamless path to purchase for customers using agents. This cryptographic proof of identity and intent provides a powerful new tool to reduce fraud and minimize chargebacks from unauthorized transactions.
+**Alpha / Experimental**
 
-## Key Benefits
+This is a proof-of-concept reference implementation. It works end-to-end but is not yet hardened for production use.
 
-- **Differentiate from Malicious Actors:** The Trusted Agent Protocol provides a definitive way for you to distinguish legitimate, authorized AI agents from other automated traffic. This allows you to confidently welcome agent-driven commerce while protecting your site from harmful bots.
-
-- **Context-Bound Security:** Every request from a trusted agent is cryptographically locked to a merchant's specific website and the exact page with which the agent is interacting . This ensures that an agent's authorization cannot be misused elsewhere.
-
-- **Protection Against Replay Attacks:** The protocol is designed to prevent bad actors from capturing and reusing old requests. Each signature includes unique, time-sensitive elements that ensure every request is fresh and valid only for a single use.
-
-- **Securely Receive Customer & Payment Identifiers:** The protocol defines a standardized way for a verified agent to pass essential customer information directly to merchants. This allows merchants to streamline the checkout process by receiving trusted data to pre-fill forms or identify the customer.
-
-## Example Agent Verification for Payments
-![](./assets/trusted-agent-protocol-flow.png)
-
-## Quick Start
-
-This repository contains a complete sample implementation demonstrating the Trusted Agent Protocol across multiple components:
-
-### 🚀 **Running the Sample**
-
-1. **Install Dependencies** (from root directory):
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Start All Services**:
-   ```bash
-   # Terminal 1: Agent Registry (port 8001)
-   cd agent-registry && python main.py
-   
-   # Terminal 2: Merchant Backend (port 8000)
-   cd merchant-backend && python -m uvicorn app.main:app --reload
-   
-   # Terminal 3: CDN Proxy (port 3002)
-   cd cdn-proxy && npm install && npm start
-   
-   # Terminal 4: Merchant Frontend (port 3001)
-   cd merchant-frontend && npm install && npm run dev
-   
-   # Terminal 5: TAP Agent (port 8501)
-   cd tap-agent && streamlit run agent_app.py
-   ```
-
-3. **Try the Demo**:
-   - Open the TAP Agent at http://localhost:8501
-   - Configure merchant URL: http://localhost:3001
-   - Generate signatures and interact with the sample merchant
-
-### 📚 **Component Documentation**
-
-Each component has detailed setup instructions:
-
-- **[TAP Agent](./tap-agent/README.md)** - Streamlit app demonstrating agent signature generation
-- **[Merchant Frontend](./merchant-frontend/README.md)** - React e-commerce sample with TAP integration  
-- **[Merchant Backend](./merchant-backend/README.md)** - FastAPI backend with signature verification
-- **[CDN Proxy](./cdn-proxy/README.md)** - Node.js proxy implementing RFC 9421 signature verification
-- **[Agent Registry](./agent-registry/README.md)** - Public key registry service for agent verification
-
-### 🏗️ **Architecture Overview**
-
-The sample demonstrates a complete TAP ecosystem:
-1. **TAP Agent** generates RFC 9421 compliant signatures
-2. **Merchant Frontend** provides the e-commerce interface
-3. **CDN Proxy** intercepts and verifies agent signatures  
-4. **Merchant Backend** processes verified requests
-5. **Agent Registry** manages agent public keys and metadata
+### Caveats
+*   **Self-Signed CA**: The `Authority` service generates a fresh self-signed Root CA on every restart (unless persistence is added).
+*   **In-Memory Storage**: The `Registry` defaults to in-memory storage. Restarting the service wipes registered agents.
+*   **Protocol Support**: Implements a subset of RFC 9421 (Signatures) and RFC 9440 (Client-Cert Headers) sufficient for demonstration.

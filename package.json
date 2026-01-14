@@ -1,0 +1,31 @@
+{
+    "name": "trusted-agent-protocol",
+    "module": "index.ts",
+    "type": "module",
+    "scripts": {
+        "registry": "bun run src/registry/module.ts",
+        "test:registry:memory": "bun test ./src/registry/storage/memory/_test.ts",
+        "test:registry:redis": "bun test ./src/registry/storage/redis/_test.ts",
+        "test:registry:sqlite": "bun test ./src/registry/storage/sqlite/_test.ts",
+        "proxy": "bun run src/proxy/module.ts",
+        "test:proxy": "bun test ./src/proxy/_test.ts",
+        "merchant": "bun run src/merchant/module.ts",
+        "test:merchant": "bun test ./src/merchant/_test.ts",
+        "agent": "bun run src/agent/module.ts",
+        "test:agent": "bun test ./src/agent/_test.ts",
+        "test:authority": "bun test ./src/registry/authority/_test.ts",
+        "test:e2e": "bun test ./src/_test.ts"
+    },
+    "private": true,
+    "devDependencies": {
+        "@types/bun": "latest"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "@interledger/http-signature-utils": "^2.0.3",
+        "@types/node-forge": "^1.3.14",
+        "node-forge": "^1.3.3"
+    }
+}

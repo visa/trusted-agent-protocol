@@ -1,9 +1,0 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-python-dotenv
-pydantic[email]==2.5.0
-python-multipart>=0.0.18
-python-jose[cryptography]>=3.4.0
-passlib[bcrypt]==1.7.4
-cryptography>=43.0.1

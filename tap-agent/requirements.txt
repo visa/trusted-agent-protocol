@@ -1,5 +1,0 @@
-streamlit>=1.37.0
-cryptography>=43.0.1
-requests>=2.32.4
-python-dotenv
-playwright>=1.40.0
