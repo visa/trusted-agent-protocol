@@ -8,11 +8,8 @@ Sample e-commerce backend service demonstrating TAP (Trusted Agent Protocol) int
 # Install dependencies (from root directory)
 pip install -r requirements.txt
 
-# Initialize sample database
+# Start server (database is auto-created and seeded on startup)
 cd merchant-backend
-python create_sample_data.py
-
-# Start server
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
@@ -44,8 +41,10 @@ This sample demonstrates:
 ## Data Management
 
 ### Initialize Sample Data
+The database and sample products are automatically created when the server starts. No manual setup is needed.
+
+To re-seed manually (e.g., after deleting the database):
 ```bash
-# Create database and populate with sample products
 python create_sample_data.py
 ```
 
@@ -114,9 +113,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 ### Database Management
 ```bash
-# Reset database
+# Reset database (will be re-created and seeded on next server start)
 rm merchant.db
-python create_sample_data.py
 
 # Update schema
 python update_database.py

@@ -15,3 +15,5 @@
 **package-lock.json**
 venv**
 scan**
+*.db
+.env

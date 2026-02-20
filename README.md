@@ -55,25 +55,31 @@ This repository contains a complete sample implementation demonstrating the Trus
    pip install -r requirements.txt
    ```
 
-2. **Start All Services**:
+2. **Generate Agent Keys** (one-time setup):
+   ```bash
+   cd tap-agent && python setup_keys.py
+   ```
+   This creates RSA and Ed25519 signing keys in `tap-agent/.env`.
+
+3. **Start All Services**:
    ```bash
    # Terminal 1: Agent Registry (port 8001)
    cd agent-registry && python main.py
-   
+
    # Terminal 2: Merchant Backend (port 8000)
    cd merchant-backend && python -m uvicorn app.main:app --reload
-   
+
    # Terminal 3: CDN Proxy (port 3002)
    cd cdn-proxy && npm install && npm start
-   
+
    # Terminal 4: Merchant Frontend (port 3001)
    cd merchant-frontend && npm install && npm run dev
-   
+
    # Terminal 5: TAP Agent (port 8501)
    cd tap-agent && streamlit run agent_app.py
    ```
 
-3. **Try the Demo**:
+4. **Try the Demo**:
    - Open the TAP Agent at http://localhost:8501
    - Configure merchant URL: http://localhost:3001
    - Generate signatures and interact with the sample merchant
@@ -87,6 +93,80 @@ Each component has detailed setup instructions:
 - **[Merchant Backend](./merchant-backend/README.md)** - FastAPI backend with signature verification
 - **[CDN Proxy](./cdn-proxy/README.md)** - Node.js proxy implementing RFC 9421 signature verification
 - **[Agent Registry](./agent-registry/README.md)** - Public key registry service for agent verification
+
+### 💰 **x402 Payment Setup (Optional)**
+
+The sample includes an x402 payment flow as an alternative to the browser-based credit card checkout. This uses USDC on Solana and Base.
+
+#### Quick Setup (Testnet)
+
+```bash
+python setup_x402.py
+```
+
+This interactive script generates merchant and agent wallets (Solana + EVM), then walks you through funding each wallet. It polls the blockchain every 15 seconds so you can open the faucets in your browser while the script waits:
+
+1. Generates merchant wallets and waits for devnet SOL funding (https://faucet.solana.com/)
+2. Creates the merchant's USDC token account (ATA) on Solana
+3. Generates agent wallets
+4. Waits for testnet USDC funding on agent wallets (https://faucet.circle.com)
+
+Each setup script creates Solana + EVM keypairs and writes them to the local `.env`. The `create_solana_ata.py` script creates the USDC Associated Token Account that the merchant needs to receive Solana payments.
+
+#### Manual Configuration
+
+If you prefer to use existing wallets, set these in `merchant-backend/.env`:
+```bash
+X402_FACILITATOR_URL=https://x402.org/facilitator
+X402_SVM_ADDRESS=<your-solana-wallet-address>
+X402_EVM_ADDRESS=<your-evm-wallet-address>
+X402_SVM_NETWORK=solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1
+X402_EVM_NETWORK=eip155:84532
+X402_ENABLED=true
+```
+
+And in `tap-agent/.env`:
+```bash
+EVM_PRIVATE_KEY=<your-evm-private-key>
+SVM_PRIVATE_KEY=<your-solana-private-key-base58>
+```
+
+The agent reuses the existing `MERCHANT_API_URL` env var (default `http://localhost:8000`).
+
+#### Facilitators
+
+A facilitator verifies and settles x402 payments on behalf of the merchant. Both production facilitators offer a free tier of 1,000 settlements per month.
+
+| Facilitator | URL | Docs |
+|---|---|---|
+| **x402.org** (default) | `https://x402.org/facilitator` | Testnet only |
+| **PayAI** | `https://facilitator.payai.network` | [docs.payai.network](https://docs.payai.network/x402/quickstart#facilitator) |
+| **Coinbase CDP** | `https://api.cdp.coinbase.com/platform/v2/x402` | [docs.cdp.coinbase.com](https://docs.cdp.coinbase.com/x402/quickstart-for-sellers#running-on-mainnet) |
+
+The default `https://x402.org/facilitator` is a public good suitable for testnet development. For production, switch to PayAI or Coinbase CDP.
+
+#### Moving to Production
+
+To accept real payments, update your `merchant-backend/.env` with mainnet values:
+
+| Setting | Testnet | Mainnet |
+|---|---|---|
+| `X402_SVM_NETWORK` | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` |
+| `X402_EVM_NETWORK` | `eip155:84532` (Base Sepolia) | `eip155:8453` (Base) |
+| USDC mint (Solana) | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| USDC contract (Base) | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+
+Switch `X402_FACILITATOR_URL` to either PayAI or Coinbase CDP and refer to their docs for credential setup.
+
+#### Testing x402 Payments
+
+1. Make sure all services are running (see [Quick Start](#-running-the-sample))
+2. Open the TAP Agent at http://localhost:8501
+3. Under **Action Selection**, choose **x402 Checkout**
+4. Enter a **Product ID** (e.g. `21` for a digital product) and **Quantity**
+5. Click **Pay with USDC (x402)**
+
+The agent will create a cart, send a checkout request (receives HTTP 402 with payment requirements), sign the USDC payment, and settle on-chain via the facilitator.
 
 ### 🏗️ **Architecture Overview**
 

@@ -670,6 +670,17 @@ app.use('/api', createProxyMiddleware({
   onProxyReq: (proxyReq, req, res) => {
     console.log(`🔄 Forwarding API request to backend: ${sanitizeLogOutput(req.path)}`);
     // Simple passthrough - no header manipulation needed
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    // Log x402 payment headers for debugging
+    const paymentRequired = proxyRes.headers['payment-required'];
+    const paymentResponse = proxyRes.headers['payment-response'];
+    if (paymentRequired) {
+      console.log(`💰 x402 PAYMENT-REQUIRED header present on response for ${sanitizeLogOutput(req.path)}`);
+    }
+    if (paymentResponse) {
+      console.log(`✅ x402 PAYMENT-RESPONSE header present on response for ${sanitizeLogOutput(req.path)}`);
+    }
   }
 }));
 

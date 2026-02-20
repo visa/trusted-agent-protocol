@@ -70,7 +70,7 @@ class Order(Base):
     billing_different = Column(Boolean, default=False)
     # Payment information (stored securely - in production, use tokenization)
     card_last_four = Column(String(4), nullable=True)  # Only store last 4 digits
-    card_brand = Column(String(20), nullable=True)  # Visa, Mastercard, etc.
+    card_brand = Column(String(255), nullable=True)  # Visa, Mastercard, x402:{network}, etc.
     payment_status = Column(String(20), default="pending")  # pending, processed, failed
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

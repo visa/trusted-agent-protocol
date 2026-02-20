@@ -6,7 +6,8 @@
 #
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.models import (
@@ -761,143 +762,153 @@ def fulfill_cart(
 @router.post("/{session_id}/x402/checkout")
 async def x402_checkout(
     session_id: str,
-    checkout_data: dict,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
-    Machine-to-machine x402 checkout endpoint
-    Accepts delegation token as payment and settles through Payment Facilitator
+    Machine-to-machine x402 checkout endpoint.
+
+    Two modes:
+      A) No PAYMENT-SIGNATURE header → return HTTP 402 with payment requirements
+      B) PAYMENT-SIGNATURE header present → verify, settle on-chain, create order
     """
-    try:
-        # Extract delegation token and agent info
-        delegation_token = checkout_data.get('delegation_token')
-        agent_id = checkout_data.get('agent_id')
-        
-        if not delegation_token or not agent_id:
-            raise HTTPException(
-                status_code=400,
-                detail="delegation_token and agent_id are required for x402 checkout"
-            )
-        
-        # Get cart by session_id
-        cart = db.query(CartModel).filter(CartModel.session_id == session_id).first()
-        if not cart:
-            raise HTTPException(status_code=404, detail="Cart not found")
-        
-        if not cart.items:
-            raise HTTPException(status_code=400, detail="Cart is empty")
-        
-        # Calculate totals
-        subtotal = sum(item.quantity * item.product.price for item in cart.items)
-        shipping_cost = 15.00  # Standard shipping
-        tax_rate = 0.0875  # 8.75% tax
-        tax_amount = subtotal * tax_rate
-        total_amount = subtotal + shipping_cost + tax_amount
-        
-        # Prepare items for settlement request
-        items = []
-        for cart_item in cart.items:
-            items.append({
-                "product_id": cart_item.product_id,
-                "name": cart_item.product.name,
-                "quantity": cart_item.quantity,
-                "price": float(cart_item.product.price)
-            })
-        
-        # Prepare settlement request to Payment Facilitator
-        merchant_id = "merchant_123"  # Your merchant ID
-        merchant_name = "Reference Merchant"
-        
-        # Generate merchant signature for settlement
-        settlement_data = f"{merchant_id}:{session_id}:{total_amount}"
-        merchant_secret = f"merchant_{merchant_id}_secret"
-        
-        import hmac
-        import hashlib
-        merchant_signature = hmac.new(
-            merchant_secret.encode('utf-8'),
-            settlement_data.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-        
-        settlement_request = {
-            "delegation_token": delegation_token,
-            "merchant_id": merchant_id,
-            "merchant_name": merchant_name,
-            "cart_id": session_id,
-            "amount": total_amount,
-            "currency": "USD",
-            "items": items,
-            "merchant_signature": merchant_signature
-        }
-        
-        # Call Payment Facilitator to settle payment
-        import requests
-        facilitator_url = "http://localhost:8001"
-        
-        try:
-            settlement_response = requests.post(
-                f"{facilitator_url}/x402/settle",
-                json=settlement_request,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-            
-            if settlement_response.status_code != 200:
-                error_detail = settlement_response.text
-                raise HTTPException(
-                    status_code=402,  # Payment Required
-                    detail=f"Payment settlement failed: {error_detail}"
-                )
-            
-            settlement_data = settlement_response.json()
-            receipt = settlement_data["transaction_receipt"]
-            
-        except requests.RequestException as e:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Payment Facilitator unavailable: {str(e)}"
-            )
-        
-        # Payment settled successfully, create order
-        order = OrderModel(
-            order_number=generate_order_number(),
-            customer_email=f"agent_{agent_id}@system.local",
-            customer_name=f"Agent {agent_id}",
-            total_amount=total_amount,
-            status="confirmed",
-            payment_method="x402_delegation",
-            payment_status="processed",
-            # Store x402 payment details
-            card_last_four=None,  # Not applicable for x402
-            card_brand="x402_token"  # Indicate x402 payment
+    from app.x402_setup import (
+        is_enabled,
+        build_checkout_requirements,
+        create_payment_required,
+        settle,
+    )
+    from x402.http import (
+        encode_payment_required_header,
+        encode_payment_response_header,
+        PAYMENT_SIGNATURE_HEADER,
+        PAYMENT_REQUIRED_HEADER,
+        PAYMENT_RESPONSE_HEADER,
+    )
+
+    if not is_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="x402 payments are not enabled on this server"
         )
-        
-        db.add(order)
-        db.commit()
-        db.refresh(order)
-        
-        # Create order items from cart
-        for cart_item in cart.items:
-            order_item = OrderItemModel(
-                order_id=order.id,
-                product_id=cart_item.product_id,
-                quantity=cart_item.quantity,
-                price=cart_item.product.price
-            )
-            db.add(order_item)
-        
-        # Clear cart after successful checkout
-        from app.models.models import CartItem as CartItemModel
-        db.query(CartItemModel).filter(CartItemModel.cart_id == cart.id).delete()
-        
-        db.commit()
-        
-        # Generate tracking number
-        tracking_number = f"TRK{uuid.uuid4().hex[:10].upper()}"
-        
-        # Return comprehensive order details to agent
-        return {
+
+    # --- Load cart and calculate totals ---
+    cart = db.query(CartModel).filter(CartModel.session_id == session_id).first()
+    if not cart:
+        raise HTTPException(status_code=404, detail="Cart not found")
+    if not cart.items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+
+    subtotal = sum(item.quantity * item.product.price for item in cart.items)
+    tax_rate = 0.08  # 8% tax
+    tax_amount = round(subtotal * tax_rate, 2)
+    shipping_cost = 0.0
+    total_amount = round(subtotal + tax_amount + shipping_cost, 2)
+
+    # Build payment requirements for both Solana and Base USDC
+    requirements = build_checkout_requirements(total_amount)
+    if not requirements:
+        raise HTTPException(
+            status_code=503,
+            detail="No x402 wallet addresses configured on merchant"
+        )
+
+    # Build the checkout URL for the payment required response
+    checkout_url = str(request.url)
+
+    # --- Check for payment header ---
+    payment_header = request.headers.get(PAYMENT_SIGNATURE_HEADER)
+
+    if not payment_header:
+        # ======== Mode A: return 402 with payment options ========
+        payment_required = create_payment_required(
+            requirements,
+            description=f"Payment of ${total_amount:.2f} required for checkout"
+        )
+        pr_header_value = encode_payment_required_header(payment_required)
+
+        return JSONResponse(
+            status_code=402,
+            content={
+                "status": "payment_required",
+                "message": f"Payment of ${total_amount:.2f} USD required",
+                "total": total_amount,
+                "subtotal": subtotal,
+                "tax": tax_amount,
+                "shipping": shipping_cost,
+                "currency": "USD",
+                "checkout_url": checkout_url,
+            },
+            headers={PAYMENT_REQUIRED_HEADER: pr_header_value},
+        )
+
+    # ======== Mode B: verify + settle + create order ========
+    try:
+        success, settle_resp, error_msg = await settle(
+            payment_header, requirements
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"x402 payment processing error: {str(e)}"
+        )
+
+    if not success:
+        # Return 402 again so the client can retry
+        payment_required = create_payment_required(requirements, description=error_msg)
+        pr_header_value = encode_payment_required_header(payment_required)
+        return JSONResponse(
+            status_code=402,
+            content={
+                "status": "payment_failed",
+                "error": error_msg,
+                "checkout_url": checkout_url,
+            },
+            headers={PAYMENT_REQUIRED_HEADER: pr_header_value},
+        )
+
+    # Determine which network was used from settle response
+    network = getattr(settle_resp, "network", "unknown")
+
+    # Create order in DB
+    order = OrderModel(
+        order_number=generate_order_number(),
+        customer_email="x402-agent@crypto.local",
+        customer_name="x402 Agent",
+        total_amount=total_amount,
+        status="confirmed",
+        payment_method="x402",
+        payment_status="settled",
+        card_last_four=None,
+        card_brand=f"x402:{network}",
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    # Create order items from cart
+    for cart_item in cart.items:
+        order_item = OrderItemModel(
+            order_id=order.id,
+            product_id=cart_item.product_id,
+            quantity=cart_item.quantity,
+            price=cart_item.product.price,
+        )
+        db.add(order_item)
+
+    # Clear cart
+    from app.models.models import CartItem as CartItemModel
+    db.query(CartItemModel).filter(CartItemModel.cart_id == cart.id).delete()
+    db.commit()
+
+    tracking_number = f"TRK{uuid.uuid4().hex[:10].upper()}"
+
+    # Encode settle receipt into response header
+    response_header_value = encode_payment_response_header(settle_resp)
+
+    return JSONResponse(
+        status_code=200,
+        content={
             "status": "success",
             "message": "x402 checkout completed successfully",
             "order": {
@@ -919,37 +930,22 @@ async def x402_checkout(
                         "product_name": item.product.name,
                         "quantity": item.quantity,
                         "unit_price": float(item.price),
-                        "total_price": float(item.quantity * item.price)
+                        "total_price": float(item.quantity * item.price),
                     }
                     for item in order.items
-                ]
+                ],
             },
             "payment": {
-                "method": "x402_delegation",
-                "receipt_id": receipt["receipt_id"],
-                "transaction_id": receipt["transaction_id"],
-                "payment_rail": receipt["payment_rail_used"],
-                "amount_charged": float(receipt["amount"]),
-                "processing_fee": float(receipt["processing_fee"]),
-                "net_amount": float(receipt["net_amount"]),
-                "status": "completed"
-            },
-            "delegation": {
-                "remaining_limit": float(settlement_data["remaining_delegation_limit"]),
-                "agent_id": agent_id
+                "method": "x402",
+                "network": network,
+                "status": "settled",
             },
             "fulfillment": {
                 "tracking_number": tracking_number,
                 "estimated_delivery": "5-7 business days",
                 "shipping_carrier": "Standard Shipping",
-                "status": "processing"
-            }
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"x402 checkout failed: {str(e)}"
-        )
+                "status": "processing",
+            },
+        },
+        headers={PAYMENT_RESPONSE_HEADER: response_header_value},
+    )

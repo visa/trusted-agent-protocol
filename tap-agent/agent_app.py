@@ -1394,6 +1394,92 @@ def parse_url_components(url: str) -> tuple[str, str]:
         st.error(f"Error parsing URL: {str(e)}")
         return "", ""
 
+def perform_x402_checkout(merchant_api_url: str, product_id: int, quantity: int = 1) -> dict:
+    """
+    Perform an x402 checkout against the merchant backend API.
+
+    Flow:
+      1. Create cart
+      2. Add items
+      3. POST x402/checkout (no payment header) → get 402 + requirements
+      4. Sign payment with x402 client
+      5. POST x402/checkout (with payment header) → get 200 + order
+    """
+    import httpx
+    from x402.client import x402ClientSync
+    from x402.http import (
+        decode_payment_required_header,
+        encode_payment_signature_header,
+        PAYMENT_SIGNATURE_HEADER,
+        PAYMENT_REQUIRED_HEADER,
+        PAYMENT_RESPONSE_HEADER,
+    )
+
+    # --- Build x402 client with wallet signers ---
+    client = x402ClientSync()
+
+    evm_key = os.getenv("EVM_PRIVATE_KEY", "")
+    svm_key = os.getenv("SVM_PRIVATE_KEY", "")
+
+    if evm_key:
+        from eth_account import Account
+        from x402.mechanisms.evm.signers import EthAccountSigner
+        from x402.mechanisms.evm.exact import register_exact_evm_client
+        account = Account.from_key(evm_key)
+        evm_signer = EthAccountSigner(account)
+        register_exact_evm_client(client, evm_signer)
+
+    if svm_key:
+        from x402.mechanisms.svm.signers import KeypairSigner
+        from x402.mechanisms.svm.exact import register_exact_svm_client
+        svm_signer = KeypairSigner.from_base58(svm_key)
+        register_exact_svm_client(client, svm_signer)
+
+    base = merchant_api_url.rstrip("/")
+    http = httpx.Client(timeout=30)
+
+    # 1. Create cart
+    resp = http.post(f"{base}/api/cart/")
+    resp.raise_for_status()
+    session_id = resp.json()["session_id"]
+
+    # 2. Add item
+    resp = http.post(
+        f"{base}/api/cart/{session_id}/items",
+        json={"product_id": product_id, "quantity": quantity},
+    )
+    resp.raise_for_status()
+
+    # 3. Initial checkout request (no payment) → 402
+    checkout_url = f"{base}/api/cart/{session_id}/x402/checkout"
+    resp = http.post(checkout_url)
+    if resp.status_code != 402:
+        return {"success": False, "error": f"Expected 402, got {resp.status_code}: {resp.text}"}
+
+    # 4. Decode payment requirements from header
+    pr_header = resp.headers.get(PAYMENT_REQUIRED_HEADER, "")
+    if not pr_header:
+        return {"success": False, "error": "No PAYMENT-REQUIRED header in 402 response"}
+
+    payment_required = decode_payment_required_header(pr_header)
+
+    # 5. Sign payment
+    payload = client.create_payment_payload(payment_required)
+    payment_sig_value = encode_payment_signature_header(payload)
+
+    # 6. Retry with signed payment header
+    resp = http.post(
+        checkout_url,
+        headers={PAYMENT_SIGNATURE_HEADER: payment_sig_value},
+    )
+
+    if resp.status_code == 200:
+        payment_response_header = resp.headers.get(PAYMENT_RESPONSE_HEADER, "")
+        return {"success": True, "payment_response_header": payment_response_header, **resp.json()}
+    else:
+        return {"success": False, "error": f"Checkout failed ({resp.status_code}): {resp.text}"}
+
+
 def main():
     st.set_page_config(
         page_title="TAP Agent",
@@ -1529,9 +1615,9 @@ def main():
     st.subheader("🎯 Action Selection")
     action_choice = st.radio(
         "Choose an action:",
-        options=["Product Details", "Checkout"],
+        options=["Product Details", "Checkout", "x402 Checkout"],
         index=0,  # Default to Product Details
-        help="Select whether to fetch product details or complete a checkout process.",
+        help="Select whether to fetch product details, complete a browser checkout, or pay with x402.",
         horizontal=True
     )
     
@@ -1622,13 +1708,63 @@ def main():
         button_text = "📦 Fetch Product Details"
         button_help = "Create RFC 9421 signature and fetch product details from the merchant"
         tag_value = "agent-browser-auth"
-    else:  # Checkout
+    elif action_choice == "Checkout":
         button_text = "🛒 Complete Checkout"
         button_help = "Create RFC 9421 signature and complete the checkout process"
         tag_value = "agent-payer-auth"
-    
-    # Single launch button that adapts to the selected action
-    if st.button(button_text, type="primary", disabled=launch_disabled, help=button_help):
+    else:  # x402 Checkout
+        button_text = "💰 Pay with USDC (x402)"
+        button_help = "Pay with x402 (USDC on Solana or Base)"
+        tag_value = "agent-payer-auth"
+
+    # x402 Checkout has its own UI section
+    if action_choice == "x402 Checkout":
+        st.subheader("💰 x402 Checkout")
+        x402_col1, x402_col2 = st.columns(2)
+        with x402_col1:
+            x402_product_id = st.number_input("Product ID", min_value=1, value=1, step=1)
+        with x402_col2:
+            x402_quantity = st.number_input("Quantity", min_value=1, value=1, step=1)
+
+        x402_api_url = os.getenv("CDN_PROXY_URL", "http://localhost:3001")
+        st.caption(f"CDN Proxy: {x402_api_url}")
+
+        if st.button(button_text, type="primary", help=button_help):
+            with st.spinner("Processing x402 payment..."):
+                try:
+                    result = perform_x402_checkout(x402_api_url, x402_product_id, x402_quantity)
+                    if result.get("success"):
+                        st.success("🎉 x402 Checkout completed successfully!")
+                        order_data = result.get("order", {})
+                        if order_data:
+                            st.markdown("### 📋 Order Confirmation")
+                            oc1, oc2 = st.columns(2)
+                            with oc1:
+                                st.metric("Order Number", order_data.get("order_number", "N/A"))
+                                st.metric("Total", f"${order_data.get('total_amount', 0):.2f}")
+                            with oc2:
+                                st.metric("Payment", result.get("payment", {}).get("method", "x402"))
+                                st.metric("Network", result.get("payment", {}).get("network", "unknown"))
+                        pr_header = result.get("payment_response_header", "")
+                        if pr_header:
+                            st.markdown("### 🧾 Payment Response Header")
+                            import base64, json as _json
+                            try:
+                                decoded = _json.loads(base64.b64decode(pr_header))
+                                st.json(decoded)
+                            except Exception:
+                                st.code(pr_header, language="text")
+                        with st.expander("🔍 Full Response"):
+                            st.json(result)
+                    else:
+                        st.error(f"❌ x402 Checkout failed: {result.get('error', 'Unknown error')}")
+                        with st.expander("Error Details"):
+                            st.json(result)
+                except Exception as e:
+                    st.error(f"❌ x402 Checkout error: {str(e)}")
+
+    # Single launch button that adapts to the selected action (Product Details / Checkout)
+    elif st.button(button_text, type="primary", disabled=launch_disabled, help=button_help):
         if st.session_state.private_key:
             import time
             spinner_text = f"Creating RFC 9421 signature and {'fetching product details' if action_choice == 'Product Details' else 'completing checkout'}..."

@@ -173,7 +173,48 @@ def create_sample_products():
             "category": "Books",
             "image_url": "https://images.unsplash.com/photo-1555066931-4365d14bab8c",
             "stock_quantity": 28
-        }
+        },
+        # Digital products suitable for x402 micropayments
+        {
+            "name": "API Call: Weather Data",
+            "description": "Single weather API call with current conditions and forecast",
+            "price": 0.01,
+            "category": "Digital",
+            "image_url": "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b",
+            "stock_quantity": 9999
+        },
+        {
+            "name": "AI Image Generation",
+            "description": "Generate one AI image from a text prompt",
+            "price": 0.05,
+            "category": "Digital",
+            "image_url": "https://images.unsplash.com/photo-1547954575-855750c57bd3",
+            "stock_quantity": 9999
+        },
+        {
+            "name": "PDF Report: Market Summary",
+            "description": "Daily market summary report with key insights",
+            "price": 0.10,
+            "category": "Digital",
+            "image_url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3",
+            "stock_quantity": 9999
+        },
+        {
+            "name": "Code Review: Single File",
+            "description": "Automated code review and suggestions for one source file",
+            "price": 0.25,
+            "category": "Digital",
+            "image_url": "https://images.unsplash.com/photo-1555066931-4365d14bab8c",
+            "stock_quantity": 9999
+        },
+        {
+            "name": "Translation: 1000 Words",
+            "description": "Professional AI translation of up to 1000 words",
+            "price": 0.50,
+            "category": "Digital",
+            "image_url": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8",
+            "stock_quantity": 9999
+        },
     ]
     
     # Check if products already exist
