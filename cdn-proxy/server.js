@@ -146,7 +146,7 @@ app.use((req, res, next) => {
 */
 
 // Agent Registry API base URL
-const AGENT_REGISTRY_URL = 'http://localhost:9002';
+const AGENT_REGISTRY_URL = 'http://localhost:8001';
 
 // Cache for fetched keys to avoid repeated API calls
 const keyCache = new Map();

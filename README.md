@@ -48,7 +48,11 @@ For merchants, the Trusted Agent Protocol describes a standardized set of mechan
 
 This repository contains a complete sample implementation demonstrating the Trusted Agent Protocol across multiple components:
 
-### 🚀 **Running the Sample**
+If you prefer an automated setup flow on macOS, run `quick_setup.sh` from the repository root. It sets up the environment, generates keys, configures each service, and starts the sample applications.
+
+Note: It requires you to have uv installed on your computer.
+
+### **Running the Sample**
 
 1. **Install Dependencies** (from root directory):
    ```bash
@@ -78,7 +82,7 @@ This repository contains a complete sample implementation demonstrating the Trus
    - Configure merchant URL: http://localhost:3001
    - Generate signatures and interact with the sample merchant
 
-### 📚 **Component Documentation**
+### **Component Documentation**
 
 Each component has detailed setup instructions:
 
@@ -88,7 +92,7 @@ Each component has detailed setup instructions:
 - **[CDN Proxy](./cdn-proxy/README.md)** - Node.js proxy implementing RFC 9421 signature verification
 - **[Agent Registry](./agent-registry/README.md)** - Public key registry service for agent verification
 
-### 🏗️ **Architecture Overview**
+### **Architecture Overview**
 
 The sample demonstrates a complete TAP ecosystem:
 1. **TAP Agent** generates RFC 9421 compliant signatures

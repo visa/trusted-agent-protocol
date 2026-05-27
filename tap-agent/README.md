@@ -18,14 +18,14 @@ ED25519_PUBLIC_KEY="base64_encoded_public_key"
 
 ## Features
 
-- 🔐 **Dual Algorithm Support**: Ed25519 and RSA-PSS-SHA256 signatures
-- 📋 **RFC 9421 Compliant**: Full HTTP Message Signatures implementation
-- 🎯 **Action Selection**: Product details extraction or complete checkout process
-- �️ **E-commerce Integration**: Automated cart management and order processing
-- 🎭 **Playwright Automation**: Browser-based interaction with merchant sites
-- 📊 **Dynamic Input Data**: Real-time signature parameter updates
-- 🔄 **Session Management**: Persistent key storage and state management
-- 🎨 **Modern UI**: Clean, intuitive Streamlit interface
+- **Dual Algorithm Support**: Ed25519 and RSA-PSS-SHA256 signatures
+- **RFC 9421 Compliant**: Full HTTP Message Signatures implementation
+- **Action Selection**: Product details extraction or complete checkout process
+- **E-commerce Integration**: Automated cart management and order processing
+- **Playwright Automation**: Browser-based interaction with merchant sites
+- **Dynamic Input Data**: Real-time signature parameter updates
+- **Session Management**: Persistent key storage and state management
+- **Modern UI**: Clean, intuitive Streamlit interface
 
 ## Quick Start
 
@@ -70,8 +70,8 @@ Choose between two signature algorithms:
 
 ### 3. Action Selection
 Choose your interaction type:
-- **📦 Product Details**: Extract product information from merchant site
-- **🛒 Complete Checkout**: Perform full e-commerce checkout process
+- **Product Details**: Extract product information from merchant site
+- **Complete Checkout**: Perform full e-commerce checkout process
 
 ### 4. Execute Action
 Click the action button to:

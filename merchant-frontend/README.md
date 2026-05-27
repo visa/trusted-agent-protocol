@@ -13,10 +13,10 @@ VITE_CDN_PROXY_URL=http://localhost:3001
 
 ## Features
 
-- 🛍️ **E-commerce Sample**: Products, shopping cart, and checkout flow
-- 🔐 **TAP Integration**: Works with signature-verified requests
-- 📱 **Responsive Design**: Mobile-friendly interface
-- 🛒 **Cart Management**: Session-based shopping cart
+- **E-commerce Sample**: Products, shopping cart, and checkout flow
+- **TAP Integration**: Works with signature-verified requests
+- **Responsive Design**: Mobile-friendly interface
+- **Cart Management**: Session-based shopping cart
 
 
 ## Quick Start

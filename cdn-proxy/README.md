@@ -20,12 +20,12 @@ DEBUG=true
 
 ## Features
 
-- 🔐 **RFC 9421 Signature Verification**: Validates HTTP Message Signatures
-- 🎭 **Multi-Algorithm Support**: Ed25519 and RSA-PSS-SHA256 algorithms
-- 🌐 **Request Proxying**: Routes verified requests to merchant backend
-- 🔑 **Dynamic Key Retrieval**: Fetches public keys from Agent Registry
-- 📊 **Request Logging**: Detailed logging for debugging
-- 🛡️ **Security Demo**: Shows secure error handling patterns
+- **RFC 9421 Signature Verification**: Validates HTTP Message Signatures
+- **Multi-Algorithm Support**: Ed25519 and RSA-PSS-SHA256 algorithms
+- **Request Proxying**: Routes verified requests to merchant backend
+- **Dynamic Key Retrieval**: Fetches public keys from Agent Registry
+- **Request Logging**: Detailed logging for debugging
+- **Security Demo**: Shows secure error handling patterns
 
 ## Quick Start
 

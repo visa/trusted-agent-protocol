@@ -1349,9 +1349,12 @@ def create_ed25519_signature(private_key_pem: str, authority: str, path: str, ke
             st.error(f"Ed25519 keys not configured. Please add ED25519_PRIVATE_KEY and ED25519_PUBLIC_KEY to your .env file.")
             return "", ""
         
-        # Load private key from base64
-        private_bytes = base64.b64decode(ed25519_private_b64)
-        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
+        # Load private key from base64-encoded PEM
+        private_pem = base64.b64decode(ed25519_private_b64)
+        private_key = serialization.load_pem_private_key(
+            private_pem,
+            password=None,
+        )
         
         print(f"🔑 Using Ed25519 Private Key: {ed25519_private_b64[:20]}...")
         print(f"🔑 Using Ed25519 Public Key: {ed25519_public_b64[:20]}...")
