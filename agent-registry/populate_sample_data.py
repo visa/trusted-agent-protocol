@@ -121,7 +121,7 @@ def main():
             return
     except Exception as e:
         print(f"❌ Cannot connect to Agent Registry Service: {str(e)}")
-        print("   Make sure the service is running on port 9000")
+        print("   Make sure the service is running on port 9002")
         return
     
     print("✅ Agent Registry Service is running")
