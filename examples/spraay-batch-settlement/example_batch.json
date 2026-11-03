@@ -1,0 +1,19 @@
+{
+  "_comment": "Amounts are RAW base-unit integer strings (USDC has 6 decimals: \"1500000\" = $1.50). recipients[] and amounts[] are parallel arrays. 'sender' is replaced at runtime with the address derived from PAYER_PRIVATE_KEY. Recipient addresses are illustrative; replace them with real payees. Keys starting with '_' are stripped before sending.",
+  "_tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "token": "USDC",
+  "chain": "base",
+  "sender": "0x1111111111111111111111111111111111111111",
+  "recipients": [
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333",
+    "0x4444444444444444444444444444444444444444",
+    "0x5555555555555555555555555555555555555555"
+  ],
+  "amounts": [
+    "1500000",
+    "2000000",
+    "10000000",
+    "750000"
+  ]
+}

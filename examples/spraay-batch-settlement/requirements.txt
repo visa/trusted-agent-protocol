@@ -1,0 +1,4 @@
+cryptography>=43.0.1
+requests>=2.32.4
+python-dotenv
+eth-account>=0.13.0
