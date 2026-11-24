@@ -1353,7 +1353,6 @@ def create_ed25519_signature(private_key_pem: str, authority: str, path: str, ke
         private_bytes = base64.b64decode(ed25519_private_b64)
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
         
-        print(f"🔑 Using Ed25519 Private Key: {ed25519_private_b64[:20]}...")
         print(f"🔑 Using Ed25519 Public Key: {ed25519_public_b64[:20]}...")
         
         # Sign with Ed25519 (no padding needed)

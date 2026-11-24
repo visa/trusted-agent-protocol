@@ -29,7 +29,8 @@ npm install
 npm run dev
 ```
 
-Available at http://localhost:3001
+The Vite development server listens at http://localhost:3000.
+Use http://localhost:3001 to browse through the CDN proxy.
 
 ## Sample Merchant UI
 ![](../assets/tap-merchant.png)

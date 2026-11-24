@@ -23,22 +23,22 @@ Access the API at http://localhost:8000 (docs at /docs)
 - **Product Management** - CRUD operations for products
 - **Shopping Cart** - Session-based cart with persistence  
 - **Order Processing** - Order creation and tracking
-- **TAP Integration** - RFC 9421 signature verification support
+- **TAP Integration** - Receives requests through the proxy's configured agent routes
 
 ## Sample API Endpoints
 
-- `GET /products` - List all products
-- `POST /cart/add` - Add item to cart
-- `POST /orders` - Create order from cart
-- `GET /orders` - View order history
+- `GET /api/products/` - List products
+- `POST /api/cart/` - Create a cart
+- `POST /api/cart/{session_id}/items` - Add an item
+- `POST /api/cart/{session_id}/checkout` - Submit the sample checkout flow
+- `GET /api/orders/` - View order history
 
 ## Architecture
 
 This sample demonstrates:
 - FastAPI async patterns
 - SQLAlchemy ORM with SQLite
-- Integration with signature verification
-- RESTful API design principles
+- Integration with the CDN proxy's agent-recognition checks
 - RESTful API design principles
 
 ## Data Management
@@ -86,17 +86,21 @@ products = db.query(Product).all()
 ## TAP Integration
 
 ### Signature Verification
-- RFC 9421 HTTP Message Signatures support
-- Integration with CDN Proxy for signature validation
-- Agent Registry integration for public key retrieval
-- Ed25519 and RSA-PSS-SHA256 algorithm support
+
+The CDN proxy performs request-signature verification on its configured agent
+routes and retrieves keys from the local Agent Registry. The FastAPI application
+serves the ordinary storefront API. Its routes do not call the older
+`app/security/signature_verification.py` helper.
+
+A request signature establishes agent recognition and covered request integrity.
+Consumer recognition, payment-container verification and payment authorization
+are separate responsibilities; the HTTP signature alone does not establish them.
 
 ### Request Flow
-1. Client makes request (through CDN Proxy)
-2. CDN validates signature headers
-3. Verified requests reach merchant backend
-4. Backend processes business logic
-5. Response returned through proxy chain
+1. A client reaches the CDN proxy or ordinary storefront API.
+2. The proxy verifies signatures on its configured agent routes.
+3. The backend handles the corresponding product, cart or checkout operation.
+4. The response returns through the selected route.
 
 ## Development
 

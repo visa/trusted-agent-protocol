@@ -39,7 +39,8 @@ npm start
 
 The CDN Proxy will be available at http://localhost:3001
 
-> **Note**: Requires Agent Registry (port 8080) and Merchant Backend (port 8000) to be running
+> **Note**: Requires Agent Registry (port 9002), Merchant Backend (port 8000),
+> and the React storefront (port 3000) to be running. The proxy listens on 3001.
 
 ## How It Works
 

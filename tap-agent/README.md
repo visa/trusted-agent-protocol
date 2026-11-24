@@ -19,7 +19,7 @@ ED25519_PUBLIC_KEY="base64_encoded_public_key"
 ## Features
 
 - 🔐 **Dual Algorithm Support**: Ed25519 and RSA-PSS-SHA256 signatures
-- 📋 **RFC 9421 Compliant**: Full HTTP Message Signatures implementation
+- 📋 **HTTP Message Signatures**: Generates the sample TAP agent-recognition profile
 - 🎯 **Action Selection**: Product details extraction or complete checkout process
 - �️ **E-commerce Integration**: Automated cart management and order processing
 - 🎭 **Playwright Automation**: Browser-based interaction with merchant sites
@@ -31,7 +31,7 @@ ED25519_PUBLIC_KEY="base64_encoded_public_key"
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.11 (used by the regression tests)
 - Node.js (for merchant services)
 - Playwright browsers (installed automatically)
 
@@ -94,8 +94,8 @@ Click the action button to:
 ### Ed25519 (Recommended)
 - **Algorithm**: Ed25519 curve25519 signatures
 - **Key Size**: 256-bit
-- **Performance**: ~64x faster than RSA
-- **Security**: Post-quantum resistant design
+- **Performance**: Depends on the runtime, key size and workload
+- **Security**: Classical elliptic-curve signatures
 - **RFC Compliance**: RFC 9421 "ed25519" algorithm
 
 ### RSA-PSS-SHA256 (Traditional)
@@ -103,7 +103,9 @@ Click the action button to:
 - **Key Size**: 2048-bit minimum
 - **Hash Function**: SHA-256
 - **Padding**: PKCS#1 PSS
-- **RFC Compliance**: RFC 9421 "rsa-pss-sha256" algorithm
+- **Compatibility**: The sample's SHA-256/MGF1-SHA-256, maximum-salt RSA-PSS
+  convention. `rsa-pss-sha256` is distinct from RFC 9421's registered
+  `rsa-pss-sha512` algorithm.
 
 ## Dependencies
 

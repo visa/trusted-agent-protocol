@@ -16,7 +16,8 @@ python populate_sample_data.py
 python main.py
 ```
 
-Access the service at http://localhost:8080 (docs at /docs)
+Access the service at http://localhost:9002 (docs at /docs).
+This local sample registry is separate from Visa's hosted agent registration service.
 
 ## Key Features
 
