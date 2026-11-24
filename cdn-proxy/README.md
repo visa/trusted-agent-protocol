@@ -35,7 +35,7 @@ request; storefront pages additionally need Vite. `npm run dev` uses nodemon.
 | `/api/...` | Public storefront API | Backend `/api/...` |
 | `/product/:id` | TAP-gated document request | React frontend |
 | Other storefront pages | Public | React frontend |
-| `/test` | Public diagnostic | Proxy itself |
+| `/test-proxy` | Public diagnostic | Proxy itself |
 
 The gateway applies to the whole `/agent-api` prefix, including any backend API
 route mounted beneath it. Public `/api` remains available and serves the same

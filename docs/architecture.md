@@ -41,7 +41,7 @@ service's working directory. Start each service from its own directory.
 | `/api/...` | No | Backend `/api/...` |
 | `/product/:id` | Yes, for the network request | React page |
 | Other storefront pages | No | React pages |
-| `/test` | No | Proxy diagnostic page |
+| `/test-proxy` | No | Proxy diagnostic page |
 
 The public API serves the same catalog. Recognition is not a confidentiality
 boundary for that catalog. React client navigation can also render a product page
