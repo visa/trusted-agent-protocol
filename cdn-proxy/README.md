@@ -52,9 +52,27 @@ The CDN Proxy will be available at http://localhost:3001
 ## Example Usage
 
 ### Proxy Routes
-- `GET /products/1` → Forwards to `http://localhost:8000/products/1`
-- `POST /cart/add` → Forwards to `http://localhost:8000/cart/add` (requires signature)
-- `GET /orders` → Forwards to `http://localhost:8000/orders` (requires signature)
+
+| Route | Policy | Destination |
+| --- | --- | --- |
+| `/agent-api/products/...` | TAP required | Backend `/api/products/...` |
+| `/agent-api/cart/...` | TAP required | Backend `/api/cart/...` |
+| `/agent-api/orders/...` | TAP required | Backend `/api/orders/...` |
+| `/api/...` | Public storefront API | Backend `/api/...` |
+| `/product/:id` | Existing TAP-gated product page | React frontend |
+| Other storefront pages | Public | React frontend |
+
+Sign the external `/agent-api/...` path. Verification happens before the proxy
+rewrites that prefix to `/api`; the query and HTTP method are preserved.
+Backend API redirects stay under `/agent-api` too. A redirected request needs a
+fresh signature over its new external target; prefer the backend's canonical
+slash-terminated collection URLs.
+
+The agent gateway demonstrates request recognition. The ordinary storefront API
+remains available to browsers and serves the same catalog. This route separation
+does not make the catalog confidential or replace the backend's consumer and
+payment authorization. Choose which backend operations require recognition when
+adapting the sample for a merchant.
 
 ### Test Signature Verification
 ```bash
