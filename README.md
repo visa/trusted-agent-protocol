@@ -1,117 +1,95 @@
-# Trusted Agent Protocol
+# Trusted Agent Protocol sample
 
-*Establishing a universal standard of trust between AI agents and merchants for the next phase of agentic commerce.*
+A local demonstration of TAP agent request recognition using HTTP Message
+Signatures. An agent signs a request, the proxy retrieves its public key from the
+sample registry, and the proxy verifies the proof before forwarding protected
+requests to the merchant API or product page.
 
-This repository demonstrates local agent request recognition. The proxy checks
-HTTP message signatures against keys in the sample registry. Consumer recognition,
-payment-container validation, consumer consent and settlement are separate parts
-of the broader protocol, with separate implementation and verification requirements.
+Request recognition proves possession of a registered key and integrity of
+covered components. Consumer consent, consumer/payment containers, payment
+authorization, and settlement require separate verification. The storefront's
+card checkout uses a mock processor; this is not a complete payment integration.
 
-Use the [TAP merchant specification](https://developer.visa.com/docs/trusted-agent-protocol/trusted-agent-protocol-specifications)
-and [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421.html) for the protocol contract.
-The local sample registry is separate from Visa's hosted registration services.
+## Start here
 
-## The Challenge
+| Goal | Entry point |
+| --- | --- |
+| Run the sample and send a real signed request | [Local quickstart](docs/quickstart.md) |
+| Get oriented as a coding agent | [AGENTS.md](AGENTS.md) |
+| Find the right guide for a task | [Documentation map](docs/README.md) |
+| Understand request flow and trust boundaries | [Architecture](docs/architecture.md) |
+| Work on TAP/RFC interoperability | [Protocol guide and authoritative sources](docs/protocol.md) |
+| Make and test a contribution | [Development guide](docs/development.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
 
-AI agents are becoming part of everyday commerce, capable of executing complex tasks like booking travel or managing subscriptions. As agent capabilities evolve, merchants need visibility into their identities and actions more than ever.
+## Services
 
-**For an agent to make a purchase, merchants must answer:**
+| Component | Local port | Responsibility |
+| --- | --- | --- |
+| [Agent registry](agent-registry/README.md) | 9002 | Local agent/public-key registration and lookup |
+| [Merchant backend](merchant-backend/README.md) | 8000 | Product, cart, and sample checkout/order API |
+| [CDN proxy](cdn-proxy/README.md) | 3001 | Signature verification on configured routes and request forwarding |
+| [Merchant frontend](merchant-frontend/README.md) | 3000 | React/Vite storefront; browse through proxy port 3001 |
+| [TAP agent](tap-agent/README.md) | 8501 | Optional Streamlit signing/browser automation UI |
 
--  Is this a legitimate, trusted, and recognized AI agent?
--  Is it acting on behalf of a specific, authenticated user?
--  Does the agent carry valid instructions from the user to make this purchase?
+The optional registry Streamlit UI runs on 8502. The local registry is separate
+from Visa's hosted registration services. Integer agent IDs and sample domains
+are local identifiers, not Visa-issued credentials.
 
-**Without a standard, merchants face an impossible choice:**
--  Block potentially valuable agent-driven commerce
--  Accept significant operational and security risks from unverified agents
+## Quick start
 
-## The Solution
+Use Python 3.11 and Node.js 22 or 24, matching regression CI. From the repo root:
 
-Visa's **Trusted Agent Protocol** defines cryptographic mechanisms for agent
-recognition, consumer recognition and payment containers. A verified request
-signature establishes possession of a trusted agent key and integrity of its
-covered request components. Consumer permission and payment authorization require
-their own checks.
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+npm --prefix cdn-proxy install
+npm --prefix merchant-frontend install
+python scripts/check.py
+```
 
-For merchants, the Trusted Agent Protocol describes a standardized set of mechanisms enabling merchants to:
+Follow the [quickstart](docs/quickstart.md) to start the registry, backend, and
+proxy, then run:
 
-- **Cryptographically Verify Agent Intent:** Instantly distinguish a legitimate, credentialed agent from an anonymous bot. The agent presents a secure signature that includes timestamps, a unique session identifier, key identifier, and algorithm identifier, allowing you to verify that the signature is current and prevent relays or replays. 
+```bash
+python scripts/demo_request.py
+```
 
-- **Check Request Binding:** Verify the components declared in the signature.
-  TAP's minimum covers authority and path. Binding a method, query or request
-  body requires additional covered components and, for content digests, validation
-  against the actual body.
+Expected output includes `unsigned=403, signed=200, replay=403`. The script
+registers a throwaway local agent, signs a fresh protected GET request, and checks
+replay rejection. It needs no browser, hosted API credentials, or real payment
+data. The quickstart also explains optional storefront and browser-agent setup.
 
-- **Receive Consumer and Payment Data:** The broader TAP specification describes
-  separately signed body objects for consumer recognition and payment data. Those
-  objects require verification in addition to the request signature.
+## Which requests require TAP?
 
-- **Reduce Fraud:** By trusting the agent's identity and intentions, merchants can create a more seamless path to purchase for customers using agents. This cryptographic proof of identity and intent provides a powerful new tool to reduce fraud and minimize chargebacks from unauthorized transactions.
+| Proxy route | Policy |
+| --- | --- |
+| `/agent-api/...` | TAP required; forwarded to backend `/api/...` after verification |
+| `/api/...` | Public storefront API |
+| `/product/:id` | Existing TAP gate on the product-page network request |
+| Other storefront pages | Public |
 
-## Key Benefits
+The public API serves the same catalog. The frontend does not sign ordinary API
+calls, and client-side navigation does not create a new protected document
+request. Use the explicit gateway when exercising request recognition.
 
-- **Differentiate from Malicious Actors:** The Trusted Agent Protocol provides a definitive way for you to distinguish legitimate, authorized AI agents from other automated traffic. This allows you to confidently welcome agent-driven commerce while protecting your site from harmful bots.
+The verifier supports Ed25519 and the sample's legacy RSA-PSS/SHA-256 maximum-salt
+convention. It implements a supported subset of RFC 9421, requires TAP metadata
+and the eight-minute maximum lifetime, and rejects unsupported declared coverage.
+Replay protection is in memory for one process. See [protocol](docs/protocol.md)
+and [architecture](docs/architecture.md) for the exact limits.
 
-- **Context-Bound Recognition:** The request signature binds the agent to the
-  covered components. The minimum host and path binding is an input to merchant
-  access policy, not proof of consumer authorization or payment completion.
+## Protocol references
 
-- **Protection Against Replay Attacks:** The protocol is designed to prevent bad actors from capturing and reusing old requests. Each signature includes unique, time-sensitive elements that ensure every request is fresh and valid only for a single use.
+Use [Visa's TAP merchant specifications](https://developer.visa.com/docs/trusted-agent-protocol/trusted-agent-protocol-specifications)
+for TAP policy, [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421.html) for HTTP
+signature construction, and the [IANA registry](https://www.iana.org/assignments/http-message-signature/)
+for registered names. Hosted API capabilities must be checked against the
+corresponding authorized API documentation, not inferred from this sample.
 
-- **Securely Receive Customer & Payment Identifiers:** The protocol defines a standardized way for a verified agent to pass essential customer information directly to merchants. This allows merchants to streamline the checkout process by receiving trusted data to pre-fill forms or identify the customer.
+The conceptual protocol diagram below covers broader interactions than the
+request-recognition implementation in this repository:
 
-## Example Agent Verification for Payments
-![](./assets/trusted-agent-protocol-flow.png)
+![Conceptual TAP interaction flow](assets/trusted-agent-protocol-flow.png)
 
-## Quick Start
-
-This repository contains a local request-recognition demo across several services:
-
-### 🚀 **Running the Sample**
-
-1. **Install Dependencies** (from root directory):
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Start All Services**:
-   ```bash
-   # Terminal 1: Agent Registry (port 9002)
-   cd agent-registry && python main.py
-   
-   # Terminal 2: Merchant Backend (port 8000)
-   cd merchant-backend && python -m uvicorn app.main:app --reload
-   
-   # Terminal 3: CDN Proxy (port 3001)
-   cd cdn-proxy && npm install && npm start
-   
-   # Terminal 4: Merchant Frontend (port 3000)
-   cd merchant-frontend && npm install && npm run dev
-   
-   # Terminal 5: TAP Agent (port 8501)
-   cd tap-agent && streamlit run agent_app.py
-   ```
-
-3. **Try the Demo**:
-   - Open the TAP Agent at http://localhost:8501
-   - Configure merchant URL: http://localhost:3001/product/1
-   - Generate signatures and interact with the sample merchant
-
-### 📚 **Component Documentation**
-
-Each component has detailed setup instructions:
-
-- **[TAP Agent](./tap-agent/README.md)** - Streamlit app demonstrating agent signature generation
-- **[Merchant Frontend](./merchant-frontend/README.md)** - React e-commerce sample with TAP integration  
-- **[Merchant Backend](./merchant-backend/README.md)** - FastAPI storefront and checkout demo
-- **[CDN Proxy](./cdn-proxy/README.md)** - Node.js proxy implementing RFC 9421 signature verification
-- **[Agent Registry](./agent-registry/README.md)** - Public key registry service for agent verification
-
-### 🏗️ **Architecture Overview**
-
-The sample request-recognition flow uses these services:
-1. **TAP Agent** generates HTTP message signatures
-2. **Merchant Frontend** provides the e-commerce interface
-3. **CDN Proxy** intercepts and verifies agent signatures  
-4. **Merchant Backend** serves the storefront API; signature verification belongs to the proxy's configured agent routes
-5. **Agent Registry** manages agent public keys and metadata
+See [LICENSE.md](LICENSE.md) for the repository license.

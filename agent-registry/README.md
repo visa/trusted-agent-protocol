@@ -1,140 +1,103 @@
-# Agent Registry Service
+# Agent registry
 
-Sample service for managing TAP (Trusted Agent Protocol) agents and their public keys, demonstrating RFC 9421 signature verification.
+A local FastAPI/SQLAlchemy sample for registering agents and public keys. It
+supplies keys to the proxy; it does not verify incoming merchant signatures itself
+and is not Visa's hosted VARS service.
 
-## Installation
+## Run
+
+Install the root Python requirements in a Python 3.11 venv as described in the
+[quickstart](../docs/quickstart.md). Then, from this directory:
 
 ```bash
-# Install dependencies (from root directory)  
-pip install -r requirements.txt
-
-# Initialize sample database
-cd agent-registry
-python populate_sample_data.py
-
-# Start service
 python main.py
 ```
 
-Access the service at http://localhost:9002 (docs at /docs).
-This local sample registry is separate from Visa's hosted agent registration service.
+The API listens on http://localhost:9002; inspect its actual schemas at
+http://localhost:9002/docs. Startup creates tables. No public-key seed is needed
+for the [signed request example](../scripts/demo_request.py).
 
-## Key Features
+| Configuration input | Behavior |
+| --- | --- |
+| `DATABASE_URL` | Defaults to `sqlite:///./agent_registry.db`, relative to this directory |
+| Listen address/port | `python main.py` uses `0.0.0.0:9002`; `HOST`/`PORT` env values are not read |
 
-- **Multi-Algorithm Support** - Ed25519 and RSA-PSS-SHA256 public keys
-- **Agent Management** - CRUD operations for TAP agents  
-- **Key Validation** - Automatic key format validation
-- **Registry UI** - Simple web interface for agent management
+To bind only to loopback with the same API port:
 
-## Sample API Endpoints
-
-### Agent Management
-- `GET /agents` - List all registered agents
-- `POST /agents/register` - Register new agent with public key
-- `GET /agents/{agent_id}` - Get agent details by agent ID
-- `PUT /agents/{agent_id}` - Update agent information
-- `DELETE /agents/{agent_id}` - Deactivate agent
-
-### Key Management
-- `POST /agents/{agent_id}/keys` - Add new key to existing agent
-- `GET /agents/{agent_id}/keys/{key_id}` - Get specific key for agent
-- `GET /keys/{key_id}` - **Get key by key ID only (used by CDN proxy)**
-
-### Domain Lookup
-- `GET /agents/domain/{domain}` - Find agent by domain
-
-## Key Management
-
-The Agent Registry supports multiple keys per agent, enabling key rotation and multi-algorithm support.
-
-### Adding Keys to Agents
-
-#### 1. Register Agent with Initial Key
 ```bash
-curl -X POST http://localhost:9002/agents/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Sample Payment Directory",
-    "domain": "https://directory.example.com",
-    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjAN...",
-    "algorithm": "rsa-pss-sha256",
-    "key_id": "primary-rsa",
-    "description": "Primary RSA key"
-  }'
+python -m uvicorn main:app --host 127.0.0.1 --port 9002
 ```
 
-#### 2. Add Additional Keys
-```bash
-curl -X POST http://localhost:9002/agents/1/keys \
-  -H "Content-Type: application/json" \
-  -d '{
-    "key_id": "backup-ed25519",
-    "algorithm": "ed25519", 
-    "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
-    "description": "Backup Ed25519 key",
-    "is_active": "true"
-  }'
-```
+The sample endpoints have no authenticated registration/admin control plane.
+An HTTP 200 here does not establish hosted Visa approval or merchant trust policy.
 
-#### 3. CDN Proxy Key Lookup
-The CDN proxy uses the `/keys/{key_id}` endpoint to retrieve keys for signature verification:
-```bash
-curl http://localhost:9002/keys/primary-rsa
-```
+## API shape
 
-Returns:
+| Operation | Endpoint |
+| --- | --- |
+| Register or update by domain | `POST /agents/register` |
+| List agents | `GET /agents` |
+| Read/update/deactivate an agent | `GET`, `PUT`, `DELETE /agents/{agent_id}` |
+| Add a key | `POST /agents/{agent_id}/keys` |
+| Read an agent's key | `GET /agents/{agent_id}/keys/{key_id}` |
+| Proxy's key-only lookup | `GET /keys/{key_id}` |
+| Legacy domain lookup | `GET /agents/domain/{domain}` |
+
+Registration uses a **keys array**, not top-level key fields. Example shape
+(`BASE64_RAW_32_BYTE_PUBLIC_KEY` must be replaced with your generated public key):
+
 ```json
 {
-  "key_id": "primary-rsa",
+  "name": "Local demo agent",
+  "domain": "https://local-demo.example",
   "is_active": "true",
-  "public_key": "-----BEGIN PUBLIC KEY-----\n...",
-  "algorithm": "rsa-pss-sha256",
-  "description": "Primary RSA key",
-  "agent_id": 1,
-  "agent_name": "Sample Payment Directory",
-  "agent_domain": "https://directory.example.com"
+  "keys": [
+    {
+      "key_id": "unique-demo-key",
+      "algorithm": "ed25519",
+      "public_key": "BASE64_RAW_32_BYTE_PUBLIC_KEY",
+      "is_active": "true"
+    }
+  ]
 }
 ```
 
-### Supported Key Formats
+The response wraps the agent as `{"success": true, "message": "...", "agent": {...}}`.
+Registering an existing domain updates that agent and matching key IDs; it is not
+an append-only operation. The active-state values are strings, not JSON booleans.
 
-#### Ed25519 Keys
-- **Format**: Base64 encoded raw public key (44 characters)
-- **Example**: `"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo="`
-- **Algorithm**: `"ed25519"`
+## Keys and revocation
 
-#### RSA-PSS-SHA256 Keys  
-- **Format**: PEM encoded RSA public key
-- **Example**: `"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0B..."`
-- **Algorithm**: `"rsa-pss-sha256"`
+- Ed25519 public keys are raw 32-byte values encoded in standard Base64, not
+  Base64url or PEM. Agent private keys never belong in registration payloads.
+- Legacy RSA public keys are PEM `BEGIN PUBLIC KEY` values. The proxy's legacy
+  RSA-PSS/SHA-256 convention is described in the [protocol guide](../docs/protocol.md).
+- Key lookups require both an active key and active parent agent. Agent
+  reactivation preserves independently disabled key flags.
+- Key-only lookup is first-match, while stored key IDs are scoped to agents.
+  Use globally unique IDs for independent agents to avoid ambiguous lookup.
+- Validation checks format, not proof of private-key possession or domain control.
 
-## Architecture
+`populate_sample_data.py` posts fixture public keys to a running registry; it does
+not generate private keys matching your local agent. Use the quickstart's
+throwaway-key example instead of assuming those fixtures can sign requests.
 
-This sample demonstrates:
-- FastAPI service patterns
-- SQLAlchemy models with SQLite
-- Multi-key agent management
-- Public key validation and management
-- Public-key lookup for the CDN proxy's signature checks
-- CDN proxy integration patterns
+## Optional UI and checks
 
-## Registry UI
-
-Start the optional Streamlit UI from this directory:
+From this directory, with root dependencies installed:
 
 ```bash
-streamlit run registry_ui.py --server.port 8502
+python -m streamlit run registry_ui.py --server.port 8502
 ```
 
-Open http://localhost:8502 for:
-- Viewing registered agents
-- Adding new agents through forms
-- Testing agent registration flow
+The UI at http://localhost:8502 calls the API on port 9002. It is a separate process,
+not a `/ui` route on the API server.
 
+From the repository root:
 
-
-### Debug Mode
 ```bash
-# Enable comprehensive logging
-DEBUG=true LOG_LEVEL=DEBUG python main.py
+python -m unittest discover -s agent-registry/tests -v
 ```
+
+The tests use actual route functions and in-memory SQLite. For architecture and
+ownership, see [AGENTS.md](../AGENTS.md).

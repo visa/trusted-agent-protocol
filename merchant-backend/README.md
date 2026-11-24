@@ -1,230 +1,84 @@
-# Merchant Backend
+# Merchant backend
 
-Sample e-commerce backend service demonstrating TAP (Trusted Agent Protocol) integration with FastAPI.
+A FastAPI/SQLAlchemy product, cart, and checkout demonstration. TAP request
+recognition belongs to the proxy's configured routes. The backend product/cart/
+order routers do not enforce TAP themselves.
 
-## Installation
+## Run
+
+Install root Python requirements in the Python 3.11 venv from the
+[quickstart](../docs/quickstart.md). From this directory:
 
 ```bash
-# Install dependencies (from root directory)
-pip install -r requirements.txt
-
-# Initialize sample database
-cd merchant-backend
 python create_sample_data.py
-
-# Start server
-python -m uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Access the API at http://localhost:8000 (docs at /docs)
+Startup creates tables. `create_sample_data.py` creates sample products and skips
+seeding when products already exist. Inspect actual route schemas at
+http://localhost:8000/docs or `/redoc`; health is `GET /health`.
 
-## Key Features
+| Environment input | Default |
+| --- | --- |
+| `DATABASE_URL` | `sqlite:///./merchant.db`, relative to this directory |
+| `ALLOWED_ORIGINS` | Local browser origins; use comma-separated explicit values |
 
-- **Product Management** - CRUD operations for products
-- **Shopping Cart** - Session-based cart with persistence  
-- **Order Processing** - Order creation and tracking
-- **TAP Integration** - Receives requests through the proxy's configured agent routes
+`.env` is loaded at startup. `DEBUG`, `LOG_LEVEL`, JWT secrets, and token-expiry
+env examples are not configuration inputs for the current app. Console logging
+is configured in `app/main.py`; the sample does not create a `logs/` file.
 
-## Sample API Endpoints
+## Routes
 
-- `GET /api/products/` - List products
-- `POST /api/cart/` - Create a cart
-- `POST /api/cart/{session_id}/items` - Add an item
-- `POST /api/cart/{session_id}/checkout` - Submit the sample checkout flow
-- `GET /api/orders/` - View order history
+| Operation | Backend endpoint |
+| --- | --- |
+| Search/list/create products | `GET`, `POST /api/products/` |
+| Read a product | `GET /api/products/{product_id}` |
+| Create/read/clear cart | `POST /api/cart/`; `GET`, `DELETE /api/cart/{session_id}` |
+| Add a cart item | `POST /api/cart/{session_id}/items` |
+| Update/remove an item | `PUT`, `DELETE /api/cart/{session_id}/items/{product_id}` |
+| Sample card checkout | `POST /api/cart/{session_id}/checkout` |
+| List/read orders | `GET /api/orders/`, `/api/orders/{order_id}` |
+| Order-number lookup | `GET /api/orders/number/{order_number}` |
+| Update/cancel an order | `PUT /api/orders/{order_id}/status`; `DELETE /api/orders/{order_id}` |
 
-## Architecture
+Examples from a separate terminal:
 
-This sample demonstrates:
-- FastAPI async patterns
-- SQLAlchemy ORM with SQLite
-- Integration with the CDN proxy's agent-recognition checks
-- RESTful API design principles
-
-## Data Management
-
-### Initialize Sample Data
 ```bash
-# Create database and populate with sample products
-python create_sample_data.py
+curl --fail http://localhost:8000/health
+curl --fail http://localhost:8000/api/products/
+curl --fail -X POST http://localhost:8000/api/cart/
 ```
 
-### Update Database Schema
-```bash
-# Run database migrations
-python update_database.py
-```
+Use the returned `session_id` for subsequent cart operations. The gateway exposes
+these paths as `/agent-api/...` on port 3001; the ordinary `/api/...` proxy paths
+remain public. See [the proxy guide](../cdn-proxy/README.md).
 
-### Database Operations
-```python
-# Direct database access (in Python shell)
-from app.database.database import get_db
-from app.models.models import Product
+## Authorization and payment boundaries
 
-# Example: Get all products
-db = next(get_db())
-products = db.query(Product).all()
-```
+There is no implemented JWT login/refresh or password-authentication system for
+these commerce routes. The `/api/auth/verify-signature` utility calls the older
+`app/security/signature_verification.py` helper using supplied JSON.
+`/api/auth/check-verification` inspects signature-related request data. Neither
+endpoint is middleware that gates the product/cart/order routers, nor a complete
+consumer authorization system. The Node proxy is the maintained request-
+recognition path in this series.
 
-## Authentication & Security
+Card checkout performs local validation and uses a mock processor. Additional
+`finalize`, `fulfill`, `/api/cart/{session_id}/x402/checkout`, and
+`/api/products/premium/search` paths contain payment/facilitator scaffolding.
+Some call a separate service at `http://localhost:8001`; that service is not
+included in this repository. These routes are not evidence of a deployed,
+verified TAP payment-container or settlement implementation. Do not use real
+card/customer data for this local demonstration.
 
-### JWT Authentication
-- Bearer token authentication
-- Configurable token expiration
-- Automatic token refresh mechanism
+## Database maintenance and validation
 
-### Password Security
-- Bcrypt password hashing
-- Strong password requirements
-- Secure session management
+Run from this directory so all tools address the same `merchant.db` file.
+`update_database.py` adds selected historical order columns to that local SQLite
+file. It is not a general migration framework. Back up an existing database
+before applying schema changes; do not delete it as a routine setup step.
 
-### CORS Configuration
-- Configurable allowed origins
-- Development and production settings
-- Secure headers and credentials handling
-
-## TAP Integration
-
-### Signature Verification
-
-The CDN proxy performs request-signature verification on its configured agent
-routes and retrieves keys from the local Agent Registry. The FastAPI application
-serves the ordinary storefront API. Its routes do not call the older
-`app/security/signature_verification.py` helper.
-
-A request signature establishes agent recognition and covered request integrity.
-Consumer recognition, payment-container verification and payment authorization
-are separate responsibilities; the HTTP signature alone does not establish them.
-
-### Request Flow
-1. A client reaches the CDN proxy or ordinary storefront API.
-2. The proxy verifies signatures on its configured agent routes.
-3. The backend handles the corresponding product, cart or checkout operation.
-4. The response returns through the selected route.
-
-## Development
-
-### Development Server
-```bash
-# Start with auto-reload
-uvicorn app.main:app --reload --port 8000
-
-# Start with specific host/port
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Production server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-### Database Management
-```bash
-# Reset database
-rm merchant.db
-python create_sample_data.py
-
-# Update schema
-python update_database.py
-
-# Backup database
-cp merchant.db merchant_backup.db
-```
-
-### Logging
-```bash
-# View logs in development
-tail -f logs/merchant-backend.log
-
-# Set log level in .env
-LOG_LEVEL=DEBUG  # DEBUG, INFO, WARNING, ERROR
-```
-
-## Testing
-
-### Manual Testing
-- **API Docs**: Visit http://localhost:8000/docs for interactive testing
-- **ReDoc**: Visit http://localhost:8000/redoc for detailed documentation
-- **Health Check**: GET http://localhost:8000/
-
-### Sample API Calls
-```bash
-# Get all products
-curl http://localhost:8000/products
-
-# Get specific product
-curl http://localhost:8000/products/1
-
-# Add item to cart
-curl -X POST http://localhost:8000/cart/add \
-  -H "Content-Type: application/json" \
-  -d '{"product_id": 1, "quantity": 2}'
-
-# Create order
-curl -X POST http://localhost:8000/orders \
-  -H "Content-Type: application/json" \
-  -d '{"customer_name": "John Doe", "customer_email": "john@example.com"}'
-```
-
-## Production Deployment
-
-### Environment Setup
-```bash
-# Production environment variables
-DEBUG=false
-LOG_LEVEL=WARNING
-DATABASE_URL=postgresql://user:pass@localhost/merchant_db
-```
-
-### Docker Deployment
-```dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Process Management
-```bash
-# Using systemd (Linux)
-sudo systemctl start merchant-backend
-sudo systemctl enable merchant-backend
-
-# Using PM2 (Node.js process manager)
-pm2 start "uvicorn app.main:app --host 0.0.0.0 --port 8000" --name merchant-backend
-```
-
-## Integration with TAP Ecosystem
-
-### Required Services
-1. **CDN Proxy** (port 3001): Request routing and signature verification
-2. **Agent Registry** (port 9002): Agent public key management
-3. **Merchant Frontend** (port 3000): User interface
-
-### Service Dependencies
-- Database (SQLite/PostgreSQL)
-- Agent Registry for signature verification
-- CDN Proxy for secure request routing
-
-## Performance Considerations
-
-- **Database Connection Pooling**: Efficient database connections
-- **Async Operations**: Non-blocking I/O for better concurrency
-- **Response Caching**: Cache frequently accessed data
-- **Request Logging**: Structured logging for monitoring
-- **Error Handling**: Comprehensive error responses
-
-## Troubleshooting
-
-### Common Issues
-- **Database connection errors**: Check DATABASE_URL and file permissions
-- **Port conflicts**: Ensure port 8000 is available
-- **CORS issues**: Verify ALLOWED_ORIGINS configuration
-- **Authentication failures**: Check SECRET_KEY and token configuration
-
-### Debug Mode
-Set `DEBUG=true` and `LOG_LEVEL=DEBUG` for detailed logging and error traces.
+Use `/docs` to exercise changed endpoints with demo data. Build and manually
+exercise the frontend when changing checkout schemas. The signature/registry
+regression suites do not constitute a complete backend commerce test suite.
+See [development](../docs/development.md) and [architecture](../docs/architecture.md).

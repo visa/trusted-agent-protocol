@@ -693,18 +693,15 @@ app.listen(PORT, () => {
 Architecture:
   Browser → Proxy:3001 (RFC 9421 CDN simulation) → React:3000 & Backend:8000
 
-RFC 9421 HTTP Message Signatures Support:
-  ✅ Signature Input parsing: sig2=("@authority" "@path"); created=...; expires=...; keyId="..."; alg="rsa-pss-sha256"
-  ✅ Signature parsing: sig2=:base64-signature:
-  ✅ RSA-PSS-SHA256 verification
-  ✅ Timestamp validation
-  ✅ Agent Registry integration
+TAP request-recognition demo:
+  Signature-Input uses lowercase keyid and matching Signature labels.
+  Register a matching public key before sending a fresh signed request.
+  Agent recognition is separate from consumer and payment authorization.
 
-Test URLs:
-  🌐 Normal access: http://localhost:${PORT}
-  🔐 With RFC 9421 headers: curl -H "signature-input: sig2=(\\"@authority\\" \\"@path\\"); created=...; keyId=\\"key-id\\"" \\
-                                 -H "signature: sig2=:base64-signature:" \\
-                                 http://localhost:${PORT}/product/1
+Local setup and signed request instructions: docs/quickstart.md
+  Run from the repository root: python scripts/demo_request.py
+  Public storefront: http://localhost:${PORT}
+  Legacy protected product page: http://localhost:${PORT}/product/1
 
   `);
 });
