@@ -1,224 +1,92 @@
-# TAP Agent
+# TAP agent
 
-A sophisticated Streamlit web application for testing RFC 9421 HTTP Message Signatures with Trusted Agent Protocol (TAP) compliant merchants.
+An optional Streamlit UI that generates TAP request-recognition signatures and
+uses Playwright to interact with the sample merchant. The browser flow is a
+manual demonstration; signature tests do not certify the checkout automation.
 
-## Environment Configuration
+For the fastest working signed request without a browser, use
+[`scripts/demo_request.py`](../scripts/demo_request.py) and the
+[quickstart](../docs/quickstart.md).
 
-Create a `.env` file in the root directory with the following variables:
+## Run the browser UI
 
-```bash
-# RSA Keys (for RSA-PSS-SHA256 signatures)
-RSA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-RSA_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-
-# Ed25519 Keys (for Ed25519 signatures)
-ED25519_PRIVATE_KEY="base64_encoded_private_key"
-ED25519_PUBLIC_KEY="base64_encoded_public_key"
-```
-
-## Features
-
-- 🔐 **Dual Algorithm Support**: Ed25519 and RSA-PSS-SHA256 signatures
-- 📋 **RFC 9421 Compliant**: Full HTTP Message Signatures implementation
-- 🎯 **Action Selection**: Product details extraction or complete checkout process
-- �️ **E-commerce Integration**: Automated cart management and order processing
-- 🎭 **Playwright Automation**: Browser-based interaction with merchant sites
-- 📊 **Dynamic Input Data**: Real-time signature parameter updates
-- 🔄 **Session Management**: Persistent key storage and state management
-- 🎨 **Modern UI**: Clean, intuitive Streamlit interface
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.8+
-- Node.js (for merchant services)
-- Playwright browsers (installed automatically)
-
-### Installation
+Use Python 3.11 with the root requirements installed. From the repository root,
+follow the quickstart to run the registry, backend, proxy, and frontend. With a
+fresh local registry and no existing `tap-agent/.env`:
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install Playwright browsers
-playwright install
+python scripts/demo_request.py --keyid primary-ed25519 --agent-env tap-agent/.env
+python -m playwright install chromium
+cd tap-agent
+python -m streamlit run agent_app.py --server.port 8501
 ```
 
-### Running the App
+The script registers a matching local public key and creates a new env file with
+mode 0600. It does not overwrite an existing env file. Open http://localhost:8501,
+select Ed25519, use the reported agent ID, and set merchant URL to
+`http://localhost:3001/product/1`. Generate/reset fresh input for each attempt.
+The supplied env configuration enables Ed25519 only.
+
+## Key configuration
+
+| Input | Format and behavior |
+| --- | --- |
+| `ED25519_PRIVATE_KEY` | Standard Base64 of the raw 32-byte private seed |
+| `ED25519_PUBLIC_KEY` | Standard Base64 of the matching raw 32-byte public key |
+| `RSA_PRIVATE_KEY` | Matching RSA private key in PEM form; dotenv quoted multiline values are supported |
+| `RSA_PUBLIC_KEY` | RSA public key in PEM `BEGIN PUBLIC KEY` form |
+
+These are the environment variables the signer reads. Merchant URL is selected
+in the UI; Streamlit's port is a CLI setting. `MERCHANT_API_URL`, `AGENT_PORT`,
+and `DEBUG` do not configure the current app. Do not mistake OpenSSL PEM Ed25519
+files for the raw Base64 values expected here.
+
+The UI uses fixed key IDs: `primary-ed25519` for Ed25519 and `primary` for RSA.
+The displayed Agent ID does not choose a different key. Register the matching
+public key under the required ID in a fresh local registry, avoiding duplicate
+key IDs across agents. The registry's public-key seed does not create private
+keys matching your environment.
+
+For RSA, generate a matching pair outside version control and place it in your
+local env file; register the public key with the existing legacy
+`rsa-pss-sha256` metadata. The sample uses SHA-256/MGF1-SHA-256 and maximum PSS
+salt. This is distinct from registered `rsa-pss-sha512` behavior.
+
+## Signature and automation boundaries
+
+`tap_signature.py` owns canonical minimum-profile construction. `agent_app.py`
+contains duplicate historical RSA signing function definitions; the later Python
+definition wins. Use the shared helper and check all definitions when editing.
+The Ed25519 function reads its key from the environment even though its signature
+still has a historical `private_key_pem` parameter.
+
+HTTP metadata uses lowercase `keyid`; the UI's displayed JSON uses an internal
+`keyId` field. The signed minimum covers authority/path, not method/query/body.
+The agent emits `agent-browser-auth` for browsing and `agent-payer-auth` for its
+checkout action. A payer tag does not prove user consent or authorize payment.
+
+The browser automation reuses configured headers while navigating. Supporting a
+protected API workflow requires signing each target afresh and defining the
+necessary operation/body coverage. The frontend's ordinary `/api` calls remain
+public; successful checkout automation does not demonstrate signature enforcement
+on every commerce operation. See [protocol](../docs/protocol.md).
+
+## Validate and troubleshoot
+
+From the repository root:
 
 ```bash
-streamlit run agent_app.py
+python -m unittest discover -s tap-agent/tests -v
+npm --prefix cdn-proxy test
 ```
 
-Open http://localhost:8501
+Tests generate throwaway keys, verify actual Python signatures in Node, and check
+that private signing material does not appear in captured logs. They do not open
+Streamlit or Playwright. Debug signature bases contain reusable proof metadata;
+keep local logs private and do not add private-key logging.
 
-## Sample Agent UI
-![](../assets/tap-agent.png)
+For browser failures, check Chromium installation, all service ports, exact
+merchant authority/path, matching registry/env keys, clock, and fresh nonce/input.
+Use the [quickstart troubleshooting table](../docs/quickstart.md).
 
-## Usage
-
-### 1. Algorithm Selection
-Choose between two signature algorithms:
-- **Ed25519**: Modern, fast, and secure (recommended)
-- **RSA-PSS-SHA256**: Traditional RSA with PSS padding
-
-### 2. Configure Agent
-- Set your **Agent ID** (default: "1")
-- Set **Merchant URL** (default: http://localhost:3001/product/1)
-- View auto-generated **Input Data** with signature parameters
-
-### 3. Action Selection
-Choose your interaction type:
-- **📦 Product Details**: Extract product information from merchant site
-- **🛒 Complete Checkout**: Perform full e-commerce checkout process
-
-### 4. Execute Action
-Click the action button to:
-- Generate RFC 9421 compliant HTTP Message Signature
-- Launch automated browser session with Playwright
-- Interact with merchant using signed requests
-- Display results in real-time
-
-## Technology Stack
-
-- **Python 3.8+**: Core runtime
-- **Streamlit**: Modern web interface framework  
-- **Cryptography**: Multi-algorithm signature support
-- **Playwright**: Browser automation for e-commerce testing
-- **Requests**: HTTP client for API interactions
-- **Python-dotenv**: Environment variable management
-
-## Cryptographic Implementation
-
-### Ed25519 (Recommended)
-- **Algorithm**: Ed25519 curve25519 signatures
-- **Key Size**: 256-bit
-- **Performance**: ~64x faster than RSA
-- **Security**: Post-quantum resistant design
-- **RFC Compliance**: RFC 9421 "ed25519" algorithm
-
-### RSA-PSS-SHA256 (Traditional)
-- **Algorithm**: RSA with PSS padding
-- **Key Size**: 2048-bit minimum
-- **Hash Function**: SHA-256
-- **Padding**: PKCS#1 PSS
-- **RFC Compliance**: RFC 9421 "rsa-pss-sha256" algorithm
-
-## Dependencies
-
-```
-streamlit>=1.37.0
-cryptography>=43.0.1
-requests>=2.32.4
-python-dotenv
-playwright>=1.40.0
-```
-
-## Advanced Features
-
-### HTTP Message Signatures (RFC 9421)
-- **Signature Components**: `@authority`, `@path`, `created`, `expires`, `nonce`, `keyId`, `tag`
-- **Multiple Algorithms**: Ed25519 and RSA-PSS-SHA256 support
-- **Dynamic Tags**: `agent-browser-auth` for product details, `agent-payer-auth` for checkout
-- **Base String Generation**: Compliant signature base string construction
-- **Header Creation**: Proper `Signature-Input` and `Signature` header formatting
-
-### E-commerce Automation
-- **Product Extraction**: Automatic product title and price detection
-- **Cart Management**: Add to cart, navigate to cart page
-- **Checkout Flow**: Complete order submission with form filling
-- **Order Tracking**: Extract order IDs using multiple strategies
-- **Error Handling**: Comprehensive error reporting and debugging
-
-### Browser Automation
-- **Playwright Integration**: Headless Chrome automation
-- **Dynamic Selectors**: Multiple selector strategies for robustness  
-- **Page Interaction**: Click, type, navigate, wait for elements
-- **Screenshot Capture**: Visual debugging capabilities
-- **Session Management**: Persistent cookies and state
-
-## Development
-
-### Local Development
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install Playwright browsers
-playwright install
-
-# Run with auto-reload
-streamlit run agent_app.py --server.runOnSave true
-```
-
-### Environment Setup
-```bash
-# Generate RSA keys (optional - for RSA-PSS-SHA256)
-openssl genrsa -out private_key.pem 2048
-openssl rsa -in private_key.pem -pubout -out public_key.pem
-
-# Generate Ed25519 keys (optional - for Ed25519)
-openssl genpkey -algorithm Ed25519 -out ed25519_private.pem
-openssl pkey -in ed25519_private.pem -pubout -out ed25519_public.pem
-```
-
-## Integration with TAP Ecosystem
-
-### Required Services
-1. **Agent Registry** (port 8080): Key management and agent registration
-2. **Merchant Backend** (port 8000): Product and order APIs
-3. **Merchant Frontend** (port 3001): E-commerce interface
-4. **CDN Proxy** (port 3001): Signature verification service
-
-### Service Communication
-- **Signature Verification**: CDN Proxy validates signatures against Agent Registry
-- **Product Data**: Retrieved from Merchant Backend via signed requests
-- **Order Processing**: Complete checkout through Merchant Frontend
-- **Key Management**: Public keys stored in Agent Registry for verification
-
-## Deployment Options
-
-### Streamlit Cloud
-```bash
-# Push to GitHub and deploy via Streamlit Cloud
-git push origin main
-# Configure secrets in Streamlit Cloud dashboard
-```
-
-### Docker
-```dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-RUN playwright install chromium
-RUN playwright install-deps
-
-COPY . .
-EXPOSE 8501
-
-CMD ["streamlit", "run", "agent_app.py", "--server.address", "0.0.0.0"]
-```
-
-### Local Production
-```bash
-# Install production dependencies
-pip install -r requirements.txt
-playwright install
-
-# Run with production settings
-streamlit run agent_app.py --server.port 8501 --server.address 0.0.0.0
-```
-
-## Troubleshooting
-
-### Common Issues
-- **Playwright browsers not installed**: Run `playwright install`
-- **Environment variables missing**: Check `.env` file configuration
-- **Port conflicts**: Ensure ports 8501, 8000, 3001, 3001, 8080 are available
-- **Signature verification failures**: Verify key formats and Agent Registry connectivity
-
-### Debug Mode
-Set `DEBUG=true` in environment to enable verbose logging and detailed error messages.
+![Sample TAP agent UI](../assets/tap-agent.png)

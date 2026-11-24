@@ -2,7 +2,7 @@
   "name": "tap-sample-merchant-ui",
   "version": "0.1.0",
   "_env_example": {
-    "note": "Create a .env file with: VITE_API_BASE_URL=http://localhost:8000, VITE_CDN_PROXY_URL=http://localhost:3001"
+    "note": "Development uses relative /api requests when VITE_API_BASE_URL is empty. See .env.example and README.md for production build behavior."
   },
   "private": true,
   "type": "module",
