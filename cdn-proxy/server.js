@@ -12,6 +12,7 @@ const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const crypto = require('crypto');
 const axios = require('axios');
+const { mountAgentApi } = require('./agent-api');
 
 
 // HTML escaping function to prevent XSS
@@ -662,7 +663,11 @@ app.use((req, res, next) => {
   }
 });
 
-// Proxy API requests to backend (simple passthrough)
+// Agent API requests must pass recognition before their /agent-api prefix is rewritten.
+// The storefront's /api remains public; recognition alone is not payment authorization.
+mountAgentApi(app, verifySignature);
+
+// Public storefront API requests to backend (simple passthrough)
 app.use('/api', createProxyMiddleware({
   target: 'http://localhost:8000',
   changeOrigin: true,
