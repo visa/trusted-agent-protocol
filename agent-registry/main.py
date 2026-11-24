@@ -229,7 +229,7 @@ async def add_agent_key(agent_id: int, key: AgentKeyCreate, db: Session = Depend
 @app.get("/keys/{key_id}")
 async def get_key_by_id(key_id: str, db: Session = Depends(get_db)):
     """
-    Get key information by key ID only (without requiring agent ID)
+    Get an active key belonging to an active agent.
     """
     try:
         # Find the key directly by key_id
@@ -238,14 +238,16 @@ async def get_key_by_id(key_id: str, db: Session = Depends(get_db)):
         if not key:
             print(f"❌ Key not found for ID: {key_id}")
             raise HTTPException(status_code=404, detail=f"Key not found for ID: {key_id}")
-        
+
         # Check if key is active
         if key.is_active != "true":
             print(f"❌ Key inactive for ID: {key_id}")
             raise HTTPException(status_code=404, detail=f"Key is inactive for ID: {key_id}")
         
-        # Get associated agent info (optional - for context)
+        # Agent deactivation must revoke recognition through this lookup too.
         agent = db.query(Agent).filter(Agent.id == key.agent_id).first()
+        if not agent or agent.is_active != "true":
+            raise HTTPException(status_code=404, detail=f"Key not found for ID: {key_id}")
         
         print(f"✅ Retrieved key '{key_id}' (agent: {agent.name if agent else 'unknown'})")
         return {
