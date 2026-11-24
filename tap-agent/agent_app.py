@@ -7,6 +7,7 @@
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import uuid
+from tap_signature import signature_input as _signature_input, signature_base as _signature_base, url_components as _url_components
 import os
 import streamlit as st
 from dotenv import load_dotenv
@@ -61,15 +62,10 @@ def create_http_message_signature(private_key_pem: str, authority: str, path: st
     """Create HTTP Message Signature following RFC 9421 syntax"""
     try:
         # Create signature parameters string
-        signature_params = f'("@authority" "@path"); created={created}; expires={expires}; keyId="{keyid}"; alg="rsa-pss-sha256"; nonce="{nonce}"; tag="{tag}"'
+        signature_params = _signature_input(keyid, nonce, created, expires, tag, "rsa-pss-sha256")
         
         # Create the signature base string following RFC 9421 format
-        signature_base_lines = [
-            f'"@authority": {authority}',
-            f'"@path": {path}',
-            f'"@signature-params": {signature_params}'
-        ]
-        signature_base = '\n'.join(signature_base_lines)
+        signature_base = _signature_base(authority, path, signature_params)
         
         print(f"🔐 RFC 9421 Signature Base String:\n{signature_base}")
         print(f"🌐 Authority: {authority}")
@@ -96,7 +92,7 @@ def create_http_message_signature(private_key_pem: str, authority: str, path: st
         signature_b64 = base64.b64encode(signature).decode('utf-8')
         
         # Format the signature-input header (RFC 9421 format)
-        signature_input_header = f'sig2=("@authority" "@path"); created={created}; expires={expires}; keyId="{keyid}"; alg="rsa-pss-sha256"; nonce="{nonce}"; tag="{tag}"'
+        signature_input_header = f'sig2={signature_params}'
         
         # Format the signature header (RFC 9421 format)
         signature_header = f'sig2=:{signature_b64}:'
@@ -112,26 +108,11 @@ def create_http_message_signature(private_key_pem: str, authority: str, path: st
         return "", ""
 
 def parse_url_components(url: str) -> tuple[str, str]:
-    """Parse URL to extract authority and path components for RFC 9421"""
+    """Parse the RFC 9421 authority and path, excluding query parameters."""
     try:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        
-        # Authority is the host (and port if not default)
-        authority = parsed.netloc
-        
-        # Path includes the path and query parameters
-        path = parsed.path
-        if parsed.query:
-            path += f"?{parsed.query}"
-        
-        print(f"🔍 Parsed URL: {url}")
-        print(f"🌐 Authority: {authority}")
-        print(f"📍 Path: {path}")
-        
-        return authority, path
-    except Exception as e:
-        print(f"❌ Error parsing URL: {str(e)}")
+        return _url_components(url)
+    except ValueError as error:
+        st.error(f"Error parsing URL: {error}")
         return "", ""
 
 def launch_with_playwright(url: str, headers: dict) -> bool:
@@ -1272,15 +1253,10 @@ def create_http_message_signature(private_key_pem: str, authority: str, path: st
     """Create HTTP Message Signature following RFC 9421 syntax"""
     try:
         # Create signature parameters string
-        signature_params = f'("@authority" "@path"); created={created}; expires={expires}; keyId="{keyid}"; alg="rsa-pss-sha256"; nonce="{nonce}"; tag="{tag}"'
+        signature_params = _signature_input(keyid, nonce, created, expires, tag, "rsa-pss-sha256")
         
         # Create the signature base string following RFC 9421 format
-        signature_base_lines = [
-            f'"@authority": {authority}',
-            f'"@path": {path}',
-            f'"@signature-params": {signature_params}'
-        ]
-        signature_base = '\n'.join(signature_base_lines)
+        signature_base = _signature_base(authority, path, signature_params)
         
         print(f"Signature Base String:\n{signature_base}")
         print(f"Authority: {authority}")
@@ -1307,7 +1283,7 @@ def create_http_message_signature(private_key_pem: str, authority: str, path: st
         signature_b64 = base64.b64encode(signature).decode('utf-8')
         
         # Format the signature-input header (RFC 9421 format)
-        signature_input_header = f'sig2=("@authority" "@path"); created={created}; expires={expires}; keyId="{keyid}"; alg="rsa-pss-sha256"; nonce="{nonce}"; tag="{tag}"'
+        signature_input_header = f'sig2={signature_params}'
         
         # Format the signature header (RFC 9421 format)
         signature_header = f'sig2=:{signature_b64}:'
@@ -1328,15 +1304,10 @@ def create_ed25519_signature(private_key_pem: str, authority: str, path: str, ke
         print(f"📍 Path: {path}")
         
         # Create signature parameters string
-        signature_params = f'("@authority" "@path"); created={created}; expires={expires}; keyId="{keyid}"; alg="ed25519"; nonce="{nonce}"; tag="{tag}"'
+        signature_params = _signature_input(keyid, nonce, created, expires, tag, "ed25519")
         
         # Create the signature base string
-        signature_base_lines = [
-            f'"@authority": {authority}',
-            f'"@path": {path}',
-            f'"@signature-params": {signature_params}'
-        ]
-        signature_base = '\n'.join(signature_base_lines)
+        signature_base = _signature_base(authority, path, signature_params)
         
         print(f"🔐 Ed25519 Signature Base String:\n{signature_base}")
         
@@ -1361,7 +1332,7 @@ def create_ed25519_signature(private_key_pem: str, authority: str, path: str, ke
         signature_b64 = base64.b64encode(signature).decode('utf-8')
         
         # Format headers
-        signature_input_header = f'sig2=("@authority" "@path"); created={created}; expires={expires}; keyId="{keyid}"; alg="ed25519"; nonce="{nonce}"; tag="{tag}"'
+        signature_input_header = f'sig2={signature_params}'
         signature_header = f'sig2=:{signature_b64}:'
         
         print(f"✅ Created Ed25519 signature")
@@ -1376,22 +1347,11 @@ def create_ed25519_signature(private_key_pem: str, authority: str, path: str, ke
         return "", ""
 
 def parse_url_components(url: str) -> tuple[str, str]:
-    """Parse URL to extract authority and path components"""
+    """Parse the RFC 9421 authority and path, excluding query parameters."""
     try:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        
-        # Authority is the host (and port if not default)
-        authority = parsed.netloc
-        
-        # Path includes the path and query parameters
-        path = parsed.path
-        if parsed.query:
-            path += f"?{parsed.query}"
-        
-        return authority, path
-    except Exception as e:
-        st.error(f"Error parsing URL: {str(e)}")
+        return _url_components(url)
+    except ValueError as error:
+        st.error(f"Error parsing URL: {error}")
         return "", ""
 
 def main():
