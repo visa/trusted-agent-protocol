@@ -1,0 +1,6 @@
+# Core registry dependencies for the SQLite regression tests; no UI server is started.
+fastapi==0.104.1
+sqlalchemy==2.0.23
+pydantic[email]==2.5.0
+uvicorn==0.24.0
+python-dotenv
