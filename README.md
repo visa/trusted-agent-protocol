@@ -94,7 +94,7 @@ This repository contains a local request-recognition demo across several service
 
 3. **Try the Demo**:
    - Open the TAP Agent at http://localhost:8501
-   - Configure merchant URL: http://localhost:3001
+   - Configure merchant URL: http://localhost:3001/product/1
    - Generate signatures and interact with the sample merchant
 
 ### 📚 **Component Documentation**

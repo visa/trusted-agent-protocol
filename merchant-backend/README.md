@@ -202,8 +202,8 @@ pm2 start "uvicorn app.main:app --host 0.0.0.0 --port 8000" --name merchant-back
 
 ### Required Services
 1. **CDN Proxy** (port 3001): Request routing and signature verification
-2. **Agent Registry** (port 8080): Agent public key management
-3. **Merchant Frontend** (port 3001): User interface
+2. **Agent Registry** (port 9002): Agent public key management
+3. **Merchant Frontend** (port 3000): User interface
 
 ### Service Dependencies
 - Database (SQLite/PostgreSQL)

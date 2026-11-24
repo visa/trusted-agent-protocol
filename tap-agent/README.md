@@ -120,7 +120,7 @@ playwright>=1.40.0
 ## Advanced Features
 
 ### HTTP Message Signatures (RFC 9421)
-- **Signature Components**: `@authority`, `@path`, `created`, `expires`, `nonce`, `keyId`, `tag`
+- **Signature Components**: `@authority`, `@path`, `created`, `expires`, `nonce`, `keyid`, `tag`
 - **Multiple Algorithms**: Ed25519 and RSA-PSS-SHA256 support
 - **Dynamic Tags**: `agent-browser-auth` for product details, `agent-payer-auth` for checkout
 - **Base String Generation**: Compliant signature base string construction
@@ -168,9 +168,9 @@ openssl pkey -in ed25519_private.pem -pubout -out ed25519_public.pem
 ## Integration with TAP Ecosystem
 
 ### Required Services
-1. **Agent Registry** (port 8080): Key management and agent registration
+1. **Agent Registry** (port 9002): Key management and agent registration
 2. **Merchant Backend** (port 8000): Product and order APIs
-3. **Merchant Frontend** (port 3001): E-commerce interface
+3. **Merchant Frontend** (port 3000): E-commerce interface
 4. **CDN Proxy** (port 3001): Signature verification service
 
 ### Service Communication
@@ -219,7 +219,7 @@ streamlit run agent_app.py --server.port 8501 --server.address 0.0.0.0
 ### Common Issues
 - **Playwright browsers not installed**: Run `playwright install`
 - **Environment variables missing**: Check `.env` file configuration
-- **Port conflicts**: Ensure ports 8501, 8000, 3001, 3001, 8080 are available
+- **Port conflicts**: Ensure ports 8501, 8000, 3000, 3001, 9002 are available
 - **Signature verification failures**: Verify key formats and Agent Registry connectivity
 
 ### Debug Mode

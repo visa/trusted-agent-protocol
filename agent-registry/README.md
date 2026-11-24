@@ -51,7 +51,7 @@ The Agent Registry supports multiple keys per agent, enabling key rotation and m
 
 #### 1. Register Agent with Initial Key
 ```bash
-curl -X POST http://localhost:8080/agents/register \
+curl -X POST http://localhost:9002/agents/register \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Sample Payment Directory",
@@ -65,7 +65,7 @@ curl -X POST http://localhost:8080/agents/register \
 
 #### 2. Add Additional Keys
 ```bash
-curl -X POST http://localhost:8080/agents/1/keys \
+curl -X POST http://localhost:9002/agents/1/keys \
   -H "Content-Type: application/json" \
   -d '{
     "key_id": "backup-ed25519",
@@ -79,7 +79,7 @@ curl -X POST http://localhost:8080/agents/1/keys \
 #### 3. CDN Proxy Key Lookup
 The CDN proxy uses the `/keys/{key_id}` endpoint to retrieve keys for signature verification:
 ```bash
-curl http://localhost:8080/keys/primary-rsa
+curl http://localhost:9002/keys/primary-rsa
 ```
 
 Returns:
@@ -115,12 +115,18 @@ This sample demonstrates:
 - SQLAlchemy models with SQLite
 - Multi-key agent management
 - Public key validation and management
-- RFC 9421 compliance for signature verification
+- Public-key lookup for the CDN proxy's signature checks
 - CDN proxy integration patterns
 
 ## Registry UI
 
-Access the web interface at http://localhost:8080/ui for:
+Start the optional Streamlit UI from this directory:
+
+```bash
+streamlit run registry_ui.py --server.port 8502
+```
+
+Open http://localhost:8502 for:
 - Viewing registered agents
 - Adding new agents through forms
 - Testing agent registration flow
