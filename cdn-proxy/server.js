@@ -10,7 +10,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 require('dotenv').config();
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const crypto = require('crypto');
+const { createVerifier, VerificationError } = require('./tap-verifier');
 const axios = require('axios');
 
 
@@ -152,20 +152,6 @@ const AGENT_REGISTRY_URL = 'http://localhost:9002';
 const keyCache = new Map();
 const CACHE_TTL = 5 ; // 5 milliseconds
 
-// Nonce cache to prevent replay attacks
-const nonceCache = new Map();
-const NONCE_TTL = 3600000; // 1 hour - nonces older than this are purged
-
-// Cleanup old nonces periodically to prevent memory leaks
-setInterval(() => {
-  const now = Date.now();
-  for (const [nonce, timestamp] of nonceCache.entries()) {
-    if (now - timestamp > NONCE_TTL) {
-      nonceCache.delete(nonce);
-    }
-  }
-}, 60000); // Clean up every minute
-
 // Function to fetch key directly by keyId from Agent Registry
 async function getKeyById(keyId) {
   const cacheKey = `key:${keyId}`;
@@ -184,7 +170,7 @@ async function getKeyById(keyId) {
   
   try {
     console.log('🔍 Fetching key from Agent Registry - KeyId:', sanitizeLogOutput(keyId));
-    const response = await axios.get(`${AGENT_REGISTRY_URL}/keys/${keyId}`);
+    const response = await axios.get(`${AGENT_REGISTRY_URL}/keys/${encodeURIComponent(keyId)}`, { timeout: 5000 });
     
     if (response.status === 200) {
       const keyData = response.data;
@@ -202,407 +188,28 @@ async function getKeyById(keyId) {
       return null;
     }
   } catch (error) {
-    console.error('❌ Error fetching key:', sanitizeLogOutput(error.message));
-    return null;
+    if (error.response?.status === 404) return null;
+    throw new Error('The agent registry is unavailable.');
   }
 }
 
 
 
-// Parse RFC 9421 signature input string to extract components
-function parseRFC9421SignatureInput(signatureInput) {
-  try {
-    // Parse RFC 9421 format: sig2=("@authority" "@path"); created=1735689600; expires=1735693200; keyId="key-id"; alg="rsa-pss-sha256"; nonce="123"; tag="agent-payment-auth"
-    const signatureMatch = signatureInput.match(/sig2=\(([^)]+)\);\s*(.+)/);
-    
-    if (!signatureMatch) {
-      throw new Error('Invalid RFC 9421 signature input format - must start with sig2=()');
-    }
-    
-    const [, paramString, attributesString] = signatureMatch;
-    
-    // Parse parameters (what's being signed)
-    const params = paramString.split(/\s+/).map(p => p.replace(/['"]/g, ''));
-    
-    // Parse attributes
-    const attributes = {};
-    const attributeMatches = attributesString.matchAll(/(\w+)=("[^"]*"|\d+)/g);
-    
-    for (const match of attributeMatches) {
-      const [, key, value] = match;
-      if (value.startsWith('"') && value.endsWith('"')) {
-        attributes[key] = value.slice(1, -1); // Remove quotes
-      } else {
-        attributes[key] = parseInt(value); // Parse numbers
-      }
-    }
-    
-    console.log('🔍 Parsed RFC 9421 signature input:');
-    console.log('  - params:', params?.map(p => sanitizeLogOutput(p)));
-    console.log('  - attributes:', Object.fromEntries(
-      Object.entries(attributes).map(([k, v]) => [k, typeof v === 'string' ? sanitizeLogOutput(v) : v])
-    ));
-    console.log('  - original signatureInput:', sanitizeLogOutput(signatureInput));
-    
-    return {
-      params,
-      nonce: attributes.nonce,
-      created: attributes.created,
-      expires: attributes.expires,
-      keyId: attributes.keyId,
-      algorithm: attributes.alg,
-      tag: attributes.tag
-    };
-  } catch (error) {
-    console.error('Failed to parse RFC 9421 signature input:', sanitizeLogOutput(error.message));
-    return null;
-  }
-}
+// This gate establishes agent recognition; it is not payment authorization.
+const verifyTap = createVerifier({
+  resolveKey: keyId => validateKeyId(keyId) ? getKeyById(keyId) : undefined
+});
 
-// Build RFC 9421 signature base string from request components
-function buildRFC9421SignatureString(params, requestData, signatureInputHeader) {
-  const components = [];
-  
-  // Add the signed components first
-  for (const param of params) {
-    switch (param) {
-      case '@authority':
-        components.push(`"@authority": ${requestData.authority}`);
-        break;
-      case '@path':
-        components.push(`"@path": ${requestData.path}`);
-        break;
-      case 'content-type':
-        components.push(`"content-type": ${requestData.contentType || 'application/json'}`);
-        break;
-      case 'host':
-        components.push(`"host": ${requestData.host || requestData.authority}`);
-        break;
-      default:
-        // Handle custom headers if needed
-        if (requestData[param]) {
-          components.push(`"${param}": ${requestData[param]}`);
-        }
-        break;
-    }
-  }
-  
-  // Add @signature-params as the last component (RFC 9421 requirement)
-  // Extract just the parameters part (remove sig2= prefix if present)
-  let signatureParams = signatureInputHeader;
-  if (signatureInputHeader.startsWith('sig2=')) {
-    signatureParams = signatureInputHeader.substring(5); // Remove 'sig2=' prefix
-  }
-  components.push(`"@signature-params": ${signatureParams}`);
-  
-  const signatureBaseString = components.join('\n');
-  
-  console.log('🔍 RFC 9421 Signature Base String:');
-  console.log('---BEGIN SIGNATURE BASE STRING---');
-  console.log(sanitizeLogOutput(signatureBaseString));
-  console.log('---END SIGNATURE BASE STRING---');
-  console.log('📏 Signature base string length:', signatureBaseString.length);
-  
-  return signatureBaseString;
-}
-
-// Verify RSA signature with PSS padding (to match Python cryptography library)
-async function verifyRSASignature(publicKeyPem, signatureBase64, signatureString) {
-  try {
-    console.log('🔍 RSA Verification:');
-    console.log('- Signature string length:', signatureString.length);
-    console.log('- Signature base64 length:', signatureBase64.length);
-    console.log('- First 100 chars of signature string:', sanitizeLogOutput(signatureString.substring(0, 100)));
-    
-    // Create public key object with explicit PSS padding
-    const publicKey = crypto.createPublicKey({
-      key: publicKeyPem,
-      format: 'pem',
-      type: 'spki'
-    });
-    
-    // Decode base64 signature
-    const signatureBuffer = Buffer.from(signatureBase64, 'base64');
-    
-    // Create verifier with PSS padding to match Python's PSS padding
-    const verifier = crypto.createVerify('RSA-SHA256');
-    verifier.update(signatureString, 'utf-8');
-    
-    // Verify with PSS padding options (matching Python's PSS.MAX_LENGTH)
-    const isValid = verifier.verify({
-      key: publicKey,
-      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: crypto.constants.RSA_PSS_SALTLEN_MAX_SIGN
-    }, signatureBuffer);
-    
-    console.log('🎯 Verification result:', isValid ? 'VALID ✅' : 'INVALID ❌');
-    return isValid;
-  } catch (error) {
-    console.error('❌ Signature verification error:', sanitizeLogOutput(error.message));
-    return false;
-  }
-}
-
-// Verify Ed25519 signature
-async function verifyEd25519Signature(publicKeyBase64, signatureBase64, signatureString) {
-  try {
-    console.log('🔍 Ed25519 Verification:');
-    console.log('- Signature string length:', signatureString.length);
-    console.log('- Signature base64 length:', signatureBase64.length);
-    console.log('- Public key base64 length:', publicKeyBase64.length);
-    console.log('- First 100 chars of signature string:', sanitizeLogOutput(signatureString.substring(0, 100)));
-    
-    // Create Ed25519 public key from base64 raw bytes
-    const publicKeyBuffer = Buffer.from(publicKeyBase64, 'base64');
-    console.log('- Public key buffer length:', publicKeyBuffer.length);
-    
-    // Ed25519 public keys should be exactly 32 bytes
-    if (publicKeyBuffer.length !== 32) {
-      throw new Error(`Ed25519 public key must be 32 bytes, got ${publicKeyBuffer.length} bytes`);
-    }
-    
-    // Create public key object using DER format for Ed25519
-    // Ed25519 public key in DER format: 30 2a 30 05 06 03 2b 65 70 03 21 00 + 32 bytes of key
-    const derPrefix = Buffer.from([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00]);
-    const derPublicKey = Buffer.concat([derPrefix, publicKeyBuffer]);
-    
-    const publicKey = crypto.createPublicKey({
-      key: derPublicKey,
-      format: 'der',
-      type: 'spki'
-    });
-    
-    // Decode base64 signature
-    const signatureBuffer = Buffer.from(signatureBase64, 'base64');
-    console.log('- Signature buffer length:', signatureBuffer.length);
-    
-    // Ed25519 signatures should be exactly 64 bytes
-    if (signatureBuffer.length !== 64) {
-      throw new Error(`Ed25519 signature must be 64 bytes, got ${signatureBuffer.length} bytes`);
-    }
-    
-    // Verify Ed25519 signature (no hashing needed, Ed25519 is pure)
-    const isValid = crypto.verify(null, Buffer.from(signatureString, 'utf-8'), publicKey, signatureBuffer);
-    
-    console.log('🎯 Ed25519 Verification result:', isValid ? 'VALID ✅' : 'INVALID ❌');
-    return isValid;
-  } catch (error) {
-    console.error('❌ Ed25519 signature verification error:', sanitizeLogOutput(error.message));
-    console.error('❌ Error stack:', error.stack);
-    return false;
-  }
-}
-
-// Signature verification middleware (simulates CDN)
 const verifySignature = async (req, res, next) => {
-  console.log('🔍 CDN Proxy: Checking request headers...');
-  console.log(`📍 Request: ${sanitizeLogOutput(req.method)} ${sanitizeLogOutput(req.url)}`);
-  
-  const signatureInput = req.headers['signature-input'];
-  const signature = req.headers['signature'];
-
-  console.log('🔍 CDN Proxy: headers are', {
-    'signature-input': signatureInput ? `${sanitizeLogOutput(signatureInput.substring(0, 50))}...` : sanitizeLogOutput(signatureInput),
-    'signature': signature ? `${sanitizeLogOutput(signature.substring(0, 30))}...` : sanitizeLogOutput(signature)
-  });
-
-let signatureData;
-
-// Parse RFC 9421 signature input
-try {
-  signatureData = parseRFC9421SignatureInput(signatureInput);
-  if (!signatureData) {
-    throw new Error('Failed to parse RFC 9421 signature input');
-  }
-} catch (err) {
-  console.log('❌ Failed to parse RFC 9421 signature-input:', sanitizeLogOutput(err.message));
-  return sendErrorResponse(res, 403, '🔐 Invalid RFC 9421 Signature Input', 
-    'Could not parse signature-input header. Expected RFC 9421 format.', err.message);
-}
-
-const signatureKeyId = signatureData.keyId;
-
-  // Validate keyId format to prevent injection attacks
-  if (!validateKeyId(signatureKeyId)) {
-    console.log('❌ CDN: Invalid keyId format - blocking');
-    return sendErrorResponse(res, 403, '🔑 Invalid Key ID Format', 
-      'The key ID contains invalid characters or is too long.', null);
-  }
-  
-  // Log incoming headers for demo (with sanitization)
-  console.log('Headers received:', {
-    'signature-key-id': sanitizeLogOutput(signatureKeyId),
-    'signature-input': sanitizeLogOutput(signatureInput),
-    'signature': sanitizeLogOutput(signature),
-    'user-agent': sanitizeLogOutput(req.headers['user-agent'])
-  });
-  
-  // Bot detection simulation
-  if (!signatureKeyId || !signatureInput || !signature) {
-    console.log('❌ CDN: Missing signature headers - blocking bot traffic');
-    return sendErrorResponse(res, 403, '🤖 Bot Traffic Detected', 
-      'This site requires verification from trusted payment directory agents.',
-      'Missing required signature headers: signature-input, signature');
-  }
-  
   try {
-    // Fetch the key directly by keyId
-    const keyInfo = await getKeyById(signatureKeyId);
-    
-    if (!keyInfo) {
-      console.log('❌ CDN: Key not found - blocking');
-      return sendErrorResponse(res, 403, '🔑 Key Not Found', 
-        'The specified key ID was not found in the registry.', `Key ID: ${signatureKeyId}`);
-    }
-    
-    // Check if key is active
-    if (keyInfo.is_active !== 'true') {
-      console.log('❌ CDN: Inactive key - blocking');
-      return sendErrorResponse(res, 403, '🔑 Inactive Key', 
-        'The specified key is not currently active.', `Key ID: ${keyInfo.key_id}`);
-    }
-    
-    console.log('✅ Key validated:', {
-      keyId: sanitizeLogOutput(keyInfo.key_id),
-      algorithm: sanitizeLogOutput(keyInfo.algorithm)
-    });
-    
-    // Validate signature timing
-    const now = Math.floor(Date.now() / 1000);
-    if (signatureData.created && signatureData.created > now + 60) {
-      console.log('❌ CDN: Signature created time is in the future');
-      return sendErrorResponse(res, 403, '🕐 Invalid Timestamp', 
-        'Signature created time is in the future.', null);
-    }
-    
-    if (signatureData.expires && signatureData.expires < now) {
-      console.log('❌ CDN: Signature has expired');
-      return sendErrorResponse(res, 403, '⏰ Signature Expired', 
-        'The signature has expired and is no longer valid.', 
-        `Expired at: ${new Date(signatureData.expires * 1000).toISOString()}`);
-    }
-    
-    // Validate nonce to prevent replay attacks
-    const nonce = signatureData.nonce;
-    if (!nonce) {
-      console.log('❌ CDN: Missing nonce in signature');
-      return sendErrorResponse(res, 403, '🔐 Missing Nonce', 
-        'Signature must include a nonce to prevent replay attacks.', null);
-    }
-    
-    // Check if nonce has been used before
-    if (nonceCache.has(nonce)) {
-      const previousUse = nonceCache.get(nonce);
-      console.log('❌ CDN: Replay attack detected - nonce already used');
-      console.log('  - Nonce:', sanitizeLogOutput(nonce));
-      console.log('  - First seen:', new Date(previousUse).toISOString());
-      console.log('  - Current time:', new Date().toISOString());
-      return sendErrorResponse(res, 403, '🚫 Replay Attack Detected', 
-        'This signature has already been used. Each request must have a unique nonce.',
-        `Nonce was previously used at ${new Date(previousUse).toISOString()}`);
-    }
-    
-    // Store nonce with current timestamp
-    nonceCache.set(nonce, Date.now());
-    console.log('✅ Nonce validated and cached:', sanitizeLogOutput(nonce));
-    
-    // Build request data for signature verification
-    const requestData = {
-      authority: req.get('host') || req.headers.host,
-      path: req.url,
-      contentType: req.get('content-type'),
-      host: req.get('host') || req.headers.host
-    };
-    
-    console.log('🔍 Request data for verification:', {
-      authority: sanitizeLogOutput(requestData.authority),
-      path: sanitizeLogOutput(requestData.path),
-      contentType: sanitizeLogOutput(requestData.contentType),
-      host: sanitizeLogOutput(requestData.host)
-    });
-    console.log('🔍 Signature data parsed:', {
-      params: signatureData.params?.map(p => sanitizeLogOutput(p)),
-      keyId: sanitizeLogOutput(signatureData.keyId),
-      algorithm: sanitizeLogOutput(signatureData.algorithm),
-      created: signatureData.created,
-      expires: signatureData.expires
-    });
-    
-    // Build RFC 9421 signature base string
-    const signatureBaseString = buildRFC9421SignatureString(
-      signatureData.params,
-      requestData,
-      signatureInput
-    );
-    
-    // Extract signature value (remove sig2=: wrapper)
-    let signatureBase64 = signature;
-    const signatureMatch = signature.match(/sig2=:([^:]+):/);
-    if (signatureMatch) {
-      signatureBase64 = signatureMatch[1];
-    } else {
-      console.log('❌ CDN: Invalid signature format - expected sig2=:base64:');
-      return sendErrorResponse(res, 403, '🔐 Invalid Signature Format', 
-        'The signature format is invalid.', 'Expected RFC 9421 signature format: sig2=:base64:');
-    }
-    
-    // Verify RFC 9421 signature
-    const publicKey = keyInfo.public_key;
-    console.log('🔐 Verifying RFC 9421 signature...');
-    console.log('🔑 Using public key from agent registry for verification');
-    console.log('📋 Key info:', { keyId: sanitizeLogOutput(keyInfo.key_id), algorithm: sanitizeLogOutput(keyInfo.algorithm) });
-    console.log('🔍 Signature base64 to verify:', sanitizeLogOutput(signatureBase64.substring(0, 50)) + '...');
-    
-    // Choose verification method based on algorithm
-    let isValidSignature = false;
-    const algorithm = signatureData.algorithm.toLowerCase();
-    
-    if (algorithm === 'rsa-pss-sha256') {
-      console.log('🔐 Using RSA-PSS-SHA256 verification...');
-      isValidSignature = await verifyRSASignature(publicKey, signatureBase64, signatureBaseString);
-    } else if (algorithm === 'ed25519') {
-      console.log('🔐 Using Ed25519 verification...');
-      isValidSignature = await verifyEd25519Signature(publicKey, signatureBase64, signatureBaseString);
-    } else {
-      console.log(`❌ CDN: Unsupported algorithm: ${algorithm}`);
-      return sendErrorResponse(res, 400, '🔐 Unsupported Algorithm', 
-        `The signature algorithm '${algorithm}' is not supported.`, `Supported algorithms: rsa-pss-sha256, ed25519`);
-    }
-    
-    if (!isValidSignature) {
-      console.log(`❌ CDN: ${algorithm} signature verification failed`);
-      return sendErrorResponse(res, 403, '🔐 Signature Verification Failed', 
-        'The signature could not be verified against the provided key.', `Key ID: ${keyInfo.key_id}, Algorithm: ${algorithm}`);
-    }
-    
-    console.log('✅ CDN: RFC 9421 signature verification successful!');
-    console.log('🎯 Authenticated request with:', {
-      keyId: sanitizeLogOutput(keyInfo.key_id),
-      algorithm: sanitizeLogOutput(signatureData.algorithm),
-      tag: sanitizeLogOutput(signatureData.tag),
-      nonce: sanitizeLogOutput(signatureData.nonce)
-    });
-    
-    console.log('✅ CDN: RFC 9421 signature verification successful!');
-    console.log('🎯 Request authenticated with:', {
-      keyId: sanitizeLogOutput(keyInfo.key_id),
-      algorithm: sanitizeLogOutput(signatureData.algorithm),
-      tag: sanitizeLogOutput(signatureData.tag),
-      nonce: sanitizeLogOutput(signatureData.nonce)
-    });
-    
-    // Signature is valid - just forward the request as-is (no headers needed)
-    console.log('� Signature valid - forwarding request without modification');
-    
+    req.tap = await verifyTap(req);
     next();
   } catch (error) {
-    console.error('❌ CDN: Signature verification error:', sanitizeLogOutput(error.message));
-    return sendErrorResponse(res, 500, '🛠️ Server Error', 
-      'An internal error occurred during signature verification.', null);
+    const status = error instanceof VerificationError ? error.status : 500;
+    return sendErrorResponse(res, status, 'TAP verification failed',
+      error instanceof VerificationError ? error.message : 'The request could not be checked.');
   }
 };
-
-
 
 // Add a test endpoint that bypasses signature verification
 app.get('/test-proxy', (req, res) => {
